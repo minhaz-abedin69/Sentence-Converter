@@ -1,0 +1,3167 @@
+<!DOCTYPE html>
+<!--
+  SENTENCE CONVERTER  (one self-contained file: HTML + CSS + JavaScript)
+  ==========================================================================
+
+  WHAT IT DOES
+    Converts an English sentence from one grammatical form to another and shows
+    the grammar rule plus a step-by-step explanation:
+      Affirmative / Negative          Assertive / Interrogative, Imperative,
+      Active / Passive voice          Exclamatory, Optative
+      Direct / Indirect speech        Simple / Complex / Compound
+
+  REQUIREMENTS
+    Language   : HTML5 + CSS3 + vanilla JavaScript (ES2018 or newer)
+    Framework  : none          Build step : none          npm packages : none
+    Browser    : any current Chrome, Edge, Firefox or Safari
+    Internet   : optional. It is only used to download two web fonts
+                 (Literata and Atkinson Hyperlegible). Offline, the page uses
+                 your system fonts and works exactly the same.
+
+  HOW TO RUN  (nothing to install)
+    Simplest : double-click this file.
+    macOS    : open sentence-converter.html
+    Windows  : start sentence-converter.html
+    Linux    : xdg-open sentence-converter.html
+    Optional local web server (any OS with Python 3):
+               python3 -m http.server 8080
+               then open  http://localhost:8080/sentence-converter.html
+
+  HOW THIS FILE IS ORGANISED  (search for these headings)
+    STYLE BLOCK ............ all CSS, light and dark theme
+    PAGE MARKUP ............ everything inside the body element
+    SCRIPT, PART 1 OF 2 .... 1A data tables, 1B grammar engine, 1C Converter API
+                             (pure logic, no access to the page)
+    SCRIPT, PART 2 OF 2 .... the user interface (buttons, drawing results, theme)
+
+  TO TEACH IT MORE WORDS  (in part 1)
+    regular verbs ........... add to COMMON_REGULAR_VERBS
+    irregular verbs ......... add to IRREGULAR_VERBS
+    opposite adjectives ..... add to ANTONYMS
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sentence Converter</title>
+  <meta name="description" content="Convert English sentences between affirmative and negative, active and passive, direct and indirect speech and more. Every result comes with the grammar rule and a step-by-step explanation.">
+  <script>
+    /* apply the saved theme before first paint to avoid a flash */
+    (function () { try { var t = localStorage.getItem('sc-theme'); if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&family=Literata:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+  <style>
+/* ==========================================================================
+   Sentence Converter
+   Visual idea: a proofreader's desk. Removed words are struck in red pen,
+   changed words are swept with a highlighter. Everything else stays quiet.
+   Serif (Literata) = language content. Sans (Atkinson Hyperlegible) = interface.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+  --bg: #EEF2F8;
+  --surface: #FFFFFF;
+  --surface-2: #F4F7FC;
+  --ink: #14213D;
+  --ink-2: #47536F;
+  --line: #CFD7E6;
+  --accent: #1D3FAE;
+  --accent-hover: #162F85;
+  --on-accent: #FFFFFF;
+  --mark: #FFE066;
+  --mark-soft: #FFF6CC;
+  --mark-edge: #E3B000;
+  --del: #B3261E;
+  --del-bg: #FCE3E1;
+  --warn-bg: #FFF4D6;
+  --warn-edge: #D99A00;
+  --warn-ink: #5C3D00;
+  --err-bg: #FDE8E6;
+  --err-edge: #C9362D;
+  --err-ink: #6B1410;
+  --focus: #1D3FAE;
+  --serif: 'Literata', 'Source Serif 4', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
+  --sans: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0C1220;
+  --surface: #131B2F;
+  --surface-2: #18223A;
+  --ink: #E9EEF8;
+  --ink-2: #AAB6D0;
+  --line: #2B3858;
+  --accent: #8FB0FF;
+  --accent-hover: #B3C8FF;
+  --on-accent: #0C1220;
+  --mark: rgba(255, 213, 63, 0.36);
+  --mark-soft: rgba(255, 213, 63, 0.13);
+  --mark-edge: #E3B53A;
+  --del: #FF9A92;
+  --del-bg: rgba(255, 120, 110, 0.16);
+  --warn-bg: rgba(255, 200, 64, 0.12);
+  --warn-edge: #E3B53A;
+  --warn-ink: #F4DDA3;
+  --err-bg: rgba(255, 110, 100, 0.12);
+  --err-edge: #FF8A80;
+  --err-ink: #FFC9C4;
+  --focus: #8FB0FF;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0C1220;
+    --surface: #131B2F;
+    --surface-2: #18223A;
+    --ink: #E9EEF8;
+    --ink-2: #AAB6D0;
+    --line: #2B3858;
+    --accent: #8FB0FF;
+    --accent-hover: #B3C8FF;
+    --on-accent: #0C1220;
+    --mark: rgba(255, 213, 63, 0.36);
+    --mark-soft: rgba(255, 213, 63, 0.13);
+    --mark-edge: #E3B53A;
+    --del: #FF9A92;
+    --del-bg: rgba(255, 120, 110, 0.16);
+    --warn-bg: rgba(255, 200, 64, 0.12);
+    --warn-edge: #E3B53A;
+    --warn-ink: #F4DDA3;
+    --err-bg: rgba(255, 110, 100, 0.12);
+    --err-edge: #FF8A80;
+    --err-ink: #FFC9C4;
+    --focus: #8FB0FF;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 1rem; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 1.0625rem/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+img, svg { display: block; max-width: 100%; }
+button, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.wrap { width: min(1040px, calc(100% - 2rem)); margin-inline: auto; }
+
+/* ---------- top bar ---------- */
+.topbar { padding: 1rem 0; }
+.topbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.brand { display: inline-flex; align-items: center; gap: .65rem; font: 700 1.15rem/1 var(--sans); color: var(--ink); text-decoration: none; }
+.brand svg { width: 2rem; height: 2rem; flex: none; }
+
+.theme-toggle {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .5rem .85rem;
+  background: transparent; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 999px;
+  font: 700 .92rem/1 var(--sans);
+}
+.theme-toggle:hover { border-color: var(--accent); }
+.theme-toggle svg { width: 1.1rem; height: 1.1rem; }
+.theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: none; }
+}
+
+/* ---------- intro ---------- */
+.intro { padding: 1.25rem 0 1.5rem; }
+.intro h1 {
+  margin: 0 0 .6rem;
+  max-width: 25ch;
+  font: 600 clamp(2rem, 4.8vw, 3rem)/1.14 var(--serif);
+  text-wrap: balance;
+  letter-spacing: -.015em;
+}
+.intro p { margin: 0; max-width: 56ch; color: var(--ink-2); font-size: 1.12rem; }
+
+/* ---------- converter form ---------- */
+.worksheet {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: clamp(1rem, 3vw, 1.75rem);
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: .75rem;
+  align-items: end;
+}
+.field { display: grid; gap: .4rem; min-width: 0; }
+.field > label, .sentence-field > label { font: 700 .98rem/1.2 var(--sans); color: var(--ink); }
+
+.select { position: relative; }
+.select select {
+  width: 100%;
+  appearance: none; -webkit-appearance: none;
+  padding: .75rem 2.5rem .75rem .9rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: 700 1.05rem/1.3 var(--sans);
+}
+.select select:hover { border-color: var(--accent); }
+.select svg {
+  position: absolute; right: .85rem; top: 50%;
+  width: 1rem; height: 1rem; margin-top: -.5rem;
+  pointer-events: none; color: var(--ink-2);
+}
+
+.swap {
+  display: grid; place-items: center;
+  width: 2.9rem; height: 2.9rem;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 50%;
+}
+.swap:hover { border-color: var(--accent); color: var(--accent); }
+.swap svg { width: 1.25rem; height: 1.25rem; }
+
+.pair-status {
+  margin: .75rem 0 0;
+  padding: .6rem .85rem;
+  background: var(--warn-bg);
+  border-left: 4px solid var(--warn-edge);
+  border-radius: 0 8px 8px 0;
+  color: var(--warn-ink);
+  font-size: .98rem;
+}
+.pair-status[hidden] { display: none; }
+
+.sentence-field { display: grid; gap: .4rem; margin-top: 1.25rem; }
+.sentence-field textarea {
+  width: 100%; min-height: 6.25rem; resize: vertical;
+  padding: .85rem 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: 400 1.3rem/1.5 var(--serif);
+}
+.sentence-field textarea::placeholder { color: var(--ink-2); opacity: .7; }
+.sentence-field textarea:hover { border-color: var(--accent); }
+.input-hint { margin: 0; min-height: 1.4em; font-size: .95rem; color: var(--ink-2); }
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; }
+.btn-primary {
+  padding: .8rem 1.6rem;
+  background: var(--accent); color: var(--on-accent);
+  border: 0; border-radius: 10px;
+  font: 700 1.05rem/1 var(--sans);
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-quiet {
+  padding: .8rem 1.1rem;
+  background: transparent; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 10px;
+  font: 700 1rem/1 var(--sans);
+}
+.btn-quiet:hover { border-color: var(--accent); }
+.shortcut { margin-left: auto; font-size: .9rem; color: var(--ink-2); }
+
+/* ---------- results ---------- */
+#output { margin-top: 1.75rem; }
+#output:empty { margin-top: 0; }
+
+.result-block { display: grid; gap: 1.5rem; }
+.panel-title { margin: 0 0 .75rem; font: 600 1.45rem/1.25 var(--serif); letter-spacing: -.005em; }
+
+.answer {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: clamp(1.1rem, 3vw, 1.9rem);
+  box-shadow: 0 1px 0 var(--line), 0 18px 32px -24px rgba(20, 33, 61, .45);
+}
+.answer .label { margin: 0 0 .15rem; font: 700 .92rem/1.3 var(--sans); color: var(--ink-2); }
+.original { margin: 0 0 1.1rem; font: 400 1.1rem/1.65 var(--serif); color: var(--ink-2); }
+.original del {
+  color: var(--del); background: var(--del-bg);
+  text-decoration: line-through; text-decoration-thickness: 2px;
+  padding: 0 .18em; border-radius: 3px;
+}
+.converted {
+  margin: 0;
+  font: 500 clamp(1.65rem, 3.8vw, 2.5rem)/1.38 var(--serif);
+  letter-spacing: -.008em;
+  overflow-wrap: anywhere;
+}
+.converted mark {
+  color: inherit;
+  background: linear-gradient(transparent 56%, var(--mark) 56%) no-repeat 0 0 / 100% 100%;
+  padding: 0 .14em; margin: 0 -.14em;
+  border-radius: 3px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  animation: sweep .6s cubic-bezier(.3, .7, .2, 1) both;
+  animation-delay: calc(.25s + var(--i, 0) * .14s);
+}
+@keyframes sweep { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
+
+.answer-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.4rem; }
+.btn-chip {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .55rem .95rem;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 999px;
+  font: 700 .95rem/1 var(--sans);
+}
+.btn-chip:hover { border-color: var(--accent); color: var(--accent); }
+.btn-chip svg { width: 1.05rem; height: 1.05rem; }
+
+.explain-grid { display: grid; gap: 1.5rem; }
+@media (min-width: 880px) { .explain-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: clamp(1.1rem, 3vw, 1.6rem);
+  min-width: 0;
+}
+.panel > p.intro-line { margin: 0 0 .6rem; font: 400 1.05rem/1.6 var(--serif); }
+
+/* formula pairs: left rule = the pattern you start with (grey) vs. the pattern you end with (blue) */
+.formula { display: grid; grid-template-columns: max-content 1fr; gap: .45rem .9rem; align-items: baseline; margin: 0 0 1rem; }
+.formula dt { font: 700 .95rem/1.4 var(--sans); color: var(--ink-2); }
+.formula dd {
+  margin: 0; padding: .5rem .8rem;
+  background: var(--surface-2);
+  border-left: 3px solid var(--line);
+  border-radius: 0 8px 8px 0;
+  font: 500 1.03rem/1.5 var(--serif);
+}
+.formula dd.is-to { border-left-color: var(--accent); }
+@media (max-width: 520px) { .formula { grid-template-columns: 1fr; gap: .2rem; } .formula dd { margin-bottom: .55rem; } }
+
+.rule-heading { margin: 1.1rem 0 .5rem; font: 700 1rem/1.3 var(--sans); }
+.rule-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
+.rule-list li {
+  padding: .6rem .8rem;
+  border-left: 3px solid transparent;
+  border-radius: 0 8px 8px 0;
+  font: 400 1rem/1.62 var(--serif);
+  max-width: 70ch;
+}
+.rule-list li.applied { background: var(--mark-soft); border-left-color: var(--mark-edge); }
+.rule-list .tag {
+  display: inline-block; margin: 0 .55rem .1rem 0; padding: .06rem .55rem;
+  background: var(--mark); color: var(--ink);
+  border-radius: 999px;
+  font: 700 .78rem/1.5 var(--sans);
+  vertical-align: .06em;
+}
+
+.more-rules { margin-top: 1.1rem; border-top: 1px solid var(--line); padding-top: .35rem; }
+.more-rules summary {
+  cursor: pointer; list-style: none;
+  display: flex; align-items: center; gap: .5rem;
+  padding: .55rem .1rem;
+  font: 700 1rem/1.3 var(--sans); color: var(--accent);
+}
+.more-rules summary::-webkit-details-marker { display: none; }
+.more-rules summary:hover span { text-decoration: underline; text-underline-offset: 3px; }
+.more-rules summary svg { width: 1rem; height: 1rem; flex: none; transition: transform .2s ease; }
+.more-rules[open] summary svg { transform: rotate(90deg); }
+.more-rules .rule-list { margin-top: .4rem; }
+.more-rules .signal-table { margin-top: 1rem; }
+
+.table-scroll { overflow-x: auto; }
+.signal-table { width: 100%; border-collapse: collapse; font-size: .96rem; }
+.signal-table caption { text-align: left; font: 700 1rem/1.3 var(--sans); padding: 0 0 .5rem; }
+.signal-table th, .signal-table td { text-align: left; vertical-align: top; padding: .55rem .6rem; border-bottom: 1px solid var(--line); }
+.signal-table th { font: 700 .92rem/1.3 var(--sans); color: var(--ink-2); }
+.signal-table td { font: 400 .98rem/1.5 var(--serif); }
+.signal-table td:first-child { font-weight: 600; }
+
+.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; }
+.steps li {
+  counter-increment: step;
+  display: grid; grid-template-columns: 2rem 1fr; gap: .8rem;
+  padding: .85rem 0;
+  border-bottom: 1px solid var(--line);
+  font: 400 1.04rem/1.65 var(--serif);
+  max-width: 68ch;
+}
+.steps li:last-child { border-bottom: 0; }
+.steps li::before {
+  content: counter(step);
+  display: grid; place-items: center;
+  width: 1.8rem; height: 1.8rem; margin-top: .1rem;
+  background: var(--accent); color: var(--on-accent);
+  border-radius: 50%;
+  font: 700 .95rem/1 var(--sans);
+}
+.steps strong, .rule-list strong, .intro-line strong, .note strong, .alert strong { font-weight: 700; }
+.steps em, .rule-list em { font-style: italic; }
+
+.note {
+  display: flex; gap: .7rem;
+  margin: 0 0 1rem; padding: .75rem 1rem;
+  background: var(--warn-bg);
+  border-left: 4px solid var(--warn-edge);
+  border-radius: 0 10px 10px 0;
+  color: var(--warn-ink);
+  font: 400 .98rem/1.55 var(--sans);
+}
+.note svg { width: 1.2rem; height: 1.2rem; flex: none; margin-top: .2rem; }
+.note p { margin: 0; }
+
+/* ---------- error / empty states ---------- */
+.alert {
+  padding: 1.2rem 1.4rem;
+  background: var(--err-bg);
+  border: 1px solid var(--err-edge);
+  border-left-width: 6px;
+  border-radius: 12px;
+  color: var(--ink);
+}
+.alert h2 { margin: 0 0 .4rem; font: 600 1.35rem/1.3 var(--serif); }
+.alert p { margin: 0 0 .6rem; max-width: 64ch; }
+.alert .tip { color: var(--ink-2); font-size: .98rem; }
+.alert .alert-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .9rem; }
+.alert.is-soft { background: var(--warn-bg); border-color: var(--warn-edge); }
+
+/* ---------- examples ---------- */
+.examples { margin-top: 1.75rem; }
+.examples summary {
+  cursor: pointer; list-style: none;
+  display: inline-flex; align-items: center; gap: .55rem;
+  padding: .55rem .2rem;
+  font: 600 1.3rem/1.3 var(--serif);
+}
+.examples summary::-webkit-details-marker { display: none; }
+.examples summary svg { width: 1.1rem; height: 1.1rem; transition: transform .2s ease; }
+.examples[open] summary svg { transform: rotate(90deg); }
+.example-list { list-style: none; margin: .75rem 0 0; padding: 0; display: grid; gap: .7rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.example {
+  width: 100%; height: 100%; text-align: left;
+  display: grid; gap: .25rem;
+  padding: .85rem 1rem;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 12px;
+}
+.example:hover { border-color: var(--accent); }
+.example .ex-sentence { font: 500 1.05rem/1.45 var(--serif); }
+.example .ex-kind { font: 400 .9rem/1.3 var(--sans); color: var(--ink-2); }
+
+/* ---------- footer ---------- */
+.site-footer { margin-top: 3rem; padding: 1.5rem 0 2.5rem; border-top: 1px solid var(--line); color: var(--ink-2); font-size: .95rem; }
+.site-footer p { margin: 0; max-width: 70ch; }
+
+/* ---------- small screens ---------- */
+@media (max-width: 520px) {
+  .theme-toggle span {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .theme-toggle { padding: .55rem; }
+}
+
+@media (max-width: 640px) {
+  .pair { grid-template-columns: 1fr; }
+  .swap { justify-self: start; transform: rotate(90deg); }
+  .shortcut { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .converted mark { animation: none; }
+  .examples summary svg, .more-rules summary svg { transition: none; }
+  html { scroll-behavior: auto; }
+}
+
+@media print {
+  body { background: #fff; color: #000; }
+  .topbar, .worksheet, .examples, .answer-actions, .site-footer { display: none !important; }
+  .answer, .panel { border-color: #999; box-shadow: none; }
+  .converted mark { animation: none; background: linear-gradient(transparent 56%, #ffe066 56%); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+  </style>
+</head>
+<body>
+
+  <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path d="M5 8h13M14 4l4 4-4 4M19 16H6M10 12l-4 4 4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/></g></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H16"/></g></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></g></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.8h.01"/></g></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="wrap">
+      <div class="brand">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="8" fill="var(--accent)"/>
+          <path d="M6.5 22.5h7M18.5 22.5h7" stroke="var(--on-accent)" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M13.2 23.5L16 17.8l2.8 5.7" fill="none" stroke="var(--mark)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Sentence Converter</span>
+      </div>
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false">
+        <svg class="icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        <svg class="icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+        <span>Dark mode</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="intro">
+      <h1>Change a sentence’s form and see exactly why it works.</h1>
+      <p>Say what your sentence is now and what you want it to become. You get the new sentence, the grammar rule behind it, and every step.</p>
+    </section>
+
+    <section class="worksheet" aria-label="Converter">
+      <noscript><p class="pair-status">This converter needs JavaScript. Please turn it on and reload the page.</p></noscript>
+      <form id="converter-form" novalidate>
+        <div class="pair">
+          <div class="field">
+            <label for="from">From</label>
+            <div class="select">
+              <select id="from" name="from"></select>
+              <svg aria-hidden="true"><use href="#i-chevron-down"/></svg>
+            </div>
+          </div>
+          <button type="button" class="swap" id="swap" aria-label="Swap From and To">
+            <svg aria-hidden="true"><use href="#i-swap"/></svg>
+          </button>
+          <div class="field">
+            <label for="to">To</label>
+            <div class="select">
+              <select id="to" name="to"></select>
+              <svg aria-hidden="true"><use href="#i-chevron-down"/></svg>
+            </div>
+          </div>
+        </div>
+        <p class="pair-status" id="pair-status" hidden></p>
+
+        <div class="sentence-field">
+          <label for="sentence">Sentence</label>
+          <textarea id="sentence" name="sentence" rows="3" maxlength="500" spellcheck="false" autocomplete="off" aria-describedby="input-hint"></textarea>
+          <p class="input-hint" id="input-hint"></p>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn-primary" id="convert">Convert</button>
+          <button type="button" class="btn-quiet" id="clear">Clear</button>
+          <span class="shortcut">Ctrl + Enter also converts</span>
+        </div>
+      </form>
+    </section>
+
+    <div id="output"></div>
+
+    <details class="examples" id="examples" open>
+      <summary>
+        <svg aria-hidden="true"><use href="#i-chevron-right"/></svg>
+        <span>Try an example</span>
+      </summary>
+      <ul class="example-list" id="example-list"></ul>
+    </details>
+
+    <div id="sr-status" class="visually-hidden" role="status" aria-live="polite"></div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>The converter follows textbook grammar patterns. When a sentence doesn’t fit one, it tells you so instead of guessing. Check important answers against your teacher’s notes.</p>
+    </div>
+  </footer>
+
+  <script>
+/* ==========================================================================
+   PART 1 OF 2: GRAMMAR LOGIC (no access to the page; plain functions only)
+     1A  Data tables      verbs, antonyms, pronoun maps, rules text, examples
+     1B  Grammar engine   one function per kind of conversion
+     1C  Converter API    Converter.convert(sentence, from, to) -> result
+   ========================================================================== */
+
+/* ========================================================================== */
+/* 1A. DATA TABLES                                                            */
+/* ========================================================================== */
+
+/**
+ * Lookup tables the grammar engine is built on. Every table here is the kind of
+ * fixed, checkable reference data a grammar textbook would print, not a guess.
+ */
+
+/* ---------- Auxiliary / modal verbs ---------- */
+const AUXILIARIES = ['am', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'have', 'has', 'had', 'do', 'does', 'did',
+  'will', 'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must', 'ought'];
+const MODALS = ['will', 'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must', 'ought'];
+const BE_FORMS = ['am', 'is', 'are', 'was', 'were', 'be', 'been', 'being'];
+
+/* ---------- Irregular verbs: base -> {past, pp} (past participle) ---------- */
+const IRREGULAR_VERBS = {
+  be: { past: 'was', pp: 'been' },
+  have: { past: 'had', pp: 'had' }, do: { past: 'did', pp: 'done' },
+  go: { past: 'went', pp: 'gone' }, come: { past: 'came', pp: 'come' }, become: { past: 'became', pp: 'become' },
+  see: { past: 'saw', pp: 'seen' }, eat: { past: 'ate', pp: 'eaten' }, give: { past: 'gave', pp: 'given' },
+  take: { past: 'took', pp: 'taken' }, write: { past: 'wrote', pp: 'written' }, make: { past: 'made', pp: 'made' },
+  buy: { past: 'bought', pp: 'bought' }, bring: { past: 'brought', pp: 'brought' }, catch: { past: 'caught', pp: 'caught' },
+  teach: { past: 'taught', pp: 'taught' }, tell: { past: 'told', pp: 'told' }, sell: { past: 'sold', pp: 'sold' },
+  break: { past: 'broke', pp: 'broken' }, speak: { past: 'spoke', pp: 'spoken' }, drive: { past: 'drove', pp: 'driven' },
+  ride: { past: 'rode', pp: 'ridden' }, rise: { past: 'rose', pp: 'risen' }, fall: { past: 'fell', pp: 'fallen' },
+  know: { past: 'knew', pp: 'known' }, grow: { past: 'grew', pp: 'grown' }, throw: { past: 'threw', pp: 'thrown' },
+  blow: { past: 'blew', pp: 'blown' }, draw: { past: 'drew', pp: 'drawn' }, fly: { past: 'flew', pp: 'flown' },
+  forget: { past: 'forgot', pp: 'forgotten' }, get: { past: 'got', pp: 'got' }, hold: { past: 'held', pp: 'held' },
+  keep: { past: 'kept', pp: 'kept' }, leave: { past: 'left', pp: 'left' }, lose: { past: 'lost', pp: 'lost' },
+  meet: { past: 'met', pp: 'met' }, pay: { past: 'paid', pp: 'paid' }, put: { past: 'put', pp: 'put' },
+  read: { past: 'read', pp: 'read' }, run: { past: 'ran', pp: 'run' }, say: { past: 'said', pp: 'said' },
+  send: { past: 'sent', pp: 'sent' }, shut: { past: 'shut', pp: 'shut' }, sing: { past: 'sang', pp: 'sung' },
+  sit: { past: 'sat', pp: 'sat' }, sleep: { past: 'slept', pp: 'slept' }, spend: { past: 'spent', pp: 'spent' },
+  stand: { past: 'stood', pp: 'stood' }, swim: { past: 'swam', pp: 'swum' }, think: { past: 'thought', pp: 'thought' },
+  understand: { past: 'understood', pp: 'understood' }, wake: { past: 'woke', pp: 'woken' }, wear: { past: 'wore', pp: 'worn' },
+  win: { past: 'won', pp: 'won' }, build: { past: 'built', pp: 'built' }, deal: { past: 'dealt', pp: 'dealt' },
+  dig: { past: 'dug', pp: 'dug' }, feel: { past: 'felt', pp: 'felt' }, find: { past: 'found', pp: 'found' },
+  fight: { past: 'fought', pp: 'fought' }, hear: { past: 'heard', pp: 'heard' }, hurt: { past: 'hurt', pp: 'hurt' },
+  lead: { past: 'led', pp: 'led' }, lend: { past: 'lent', pp: 'lent' }, light: { past: 'lit', pp: 'lit' },
+  mean: { past: 'meant', pp: 'meant' }, shoot: { past: 'shot', pp: 'shot' }, shine: { past: 'shone', pp: 'shone' },
+  spread: { past: 'spread', pp: 'spread' }, strike: { past: 'struck', pp: 'struck' }, sweep: { past: 'swept', pp: 'swept' },
+  cut: { past: 'cut', pp: 'cut' }, hit: { past: 'hit', pp: 'hit' }, cost: { past: 'cost', pp: 'cost' },
+  let: { past: 'let', pp: 'let' }, set: { past: 'set', pp: 'set' }, cast: { past: 'cast', pp: 'cast' },
+  burst: { past: 'burst', pp: 'burst' }, quit: { past: 'quit', pp: 'quit' }, shed: { past: 'shed', pp: 'shed' },
+  upset: { past: 'upset', pp: 'upset' }, begin: { past: 'began', pp: 'begun' }, drink: { past: 'drank', pp: 'drunk' },
+  ring: { past: 'rang', pp: 'rung' }, sink: { past: 'sank', pp: 'sunk' }, swing: { past: 'swung', pp: 'swung' },
+  choose: { past: 'chose', pp: 'chosen' }, freeze: { past: 'froze', pp: 'frozen' }, steal: { past: 'stole', pp: 'stolen' },
+  bite: { past: 'bit', pp: 'bitten' }, hide: { past: 'hid', pp: 'hidden' }, bind: { past: 'bound', pp: 'bound' },
+  grind: { past: 'ground', pp: 'ground' }, wind: { past: 'wound', pp: 'wound' }, creep: { past: 'crept', pp: 'crept' },
+  weep: { past: 'wept', pp: 'wept' }, sting: { past: 'stung', pp: 'stung' }, stick: { past: 'stuck', pp: 'stuck' },
+  forbid: { past: 'forbade', pp: 'forbidden' }, forgive: { past: 'forgave', pp: 'forgiven' }, hang: { past: 'hung', pp: 'hung' },
+  lay: { past: 'laid', pp: 'laid' }, shake: { past: 'shook', pp: 'shaken' }, shrink: { past: 'shrank', pp: 'shrunk' },
+  slide: { past: 'slid', pp: 'slid' }, spin: { past: 'spun', pp: 'spun' }, split: { past: 'split', pp: 'split' },
+  swear: { past: 'swore', pp: 'sworn' }, tear: { past: 'tore', pp: 'torn' }, awake: { past: 'awoke', pp: 'awoken' },
+  cling: { past: 'clung', pp: 'clung' }, kneel: { past: 'knelt', pp: 'knelt' }, feed: { past: 'fed', pp: 'fed' },
+  flee: { past: 'fled', pp: 'fled' }, dream: { past: 'dreamt', pp: 'dreamt' }, learn: { past: 'learnt', pp: 'learnt' },
+  burn: { past: 'burnt', pp: 'burnt' }, smell: { past: 'smelt', pp: 'smelt' }, spoil: { past: 'spoilt', pp: 'spoilt' }
+};
+
+const SPECIAL_REGULAR_VERBS = {
+  stop: { past: 'stopped', pp: 'stopped' }, plan: { past: 'planned', pp: 'planned' }, stir: { past: 'stirred', pp: 'stirred' },
+  drop: { past: 'dropped', pp: 'dropped' }, grab: { past: 'grabbed', pp: 'grabbed' }, rob: { past: 'robbed', pp: 'robbed' },
+  admit: { past: 'admitted', pp: 'admitted' }, permit: { past: 'permitted', pp: 'permitted' }, occur: { past: 'occurred', pp: 'occurred' },
+  refer: { past: 'referred', pp: 'referred' }, prefer: { past: 'preferred', pp: 'preferred' }, control: { past: 'controlled', pp: 'controlled' },
+  travel: { past: 'travelled', pp: 'travelled' }, cancel: { past: 'cancelled', pp: 'cancelled' }, signal: { past: 'signalled', pp: 'signalled' },
+  worship: { past: 'worshipped', pp: 'worshipped' }, kidnap: { past: 'kidnapped', pp: 'kidnapped' }, equip: { past: 'equipped', pp: 'equipped' }
+};
+
+/* ---------- Adjective antonyms (for affirmative <-> negative with meaning preserved) ---------- */
+const ANTONYMS = {
+  honest: 'dishonest', dishonest: 'honest', kind: 'unkind', unkind: 'kind',
+  happy: 'unhappy', unhappy: 'happy', correct: 'incorrect', incorrect: 'correct',
+  possible: 'impossible', impossible: 'possible', legal: 'illegal', illegal: 'legal',
+  regular: 'irregular', irregular: 'regular', polite: 'impolite', impolite: 'polite',
+  patient: 'impatient', impatient: 'patient', important: 'unimportant', unimportant: 'important',
+  fortunate: 'unfortunate', unfortunate: 'fortunate', comfortable: 'uncomfortable', uncomfortable: 'comfortable',
+  common: 'uncommon', uncommon: 'common', certain: 'uncertain', uncertain: 'certain',
+  clear: 'unclear', unclear: 'clear', clean: 'unclean', unclean: 'clean',
+  fair: 'unfair', unfair: 'fair', familiar: 'unfamiliar', unfamiliar: 'familiar',
+  friendly: 'unfriendly', unfriendly: 'friendly', grateful: 'ungrateful', ungrateful: 'grateful',
+  likely: 'unlikely', unlikely: 'likely', lucky: 'unlucky', unlucky: 'lucky',
+  mature: 'immature', immature: 'mature', mortal: 'immortal', immortal: 'mortal',
+  moral: 'immoral', immoral: 'moral', obedient: 'disobedient', disobedient: 'obedient',
+  perfect: 'imperfect', imperfect: 'perfect', pleasant: 'unpleasant', unpleasant: 'pleasant',
+  popular: 'unpopular', unpopular: 'popular', pure: 'impure', impure: 'pure',
+  reasonable: 'unreasonable', unreasonable: 'reasonable', responsible: 'irresponsible', irresponsible: 'responsible',
+  satisfied: 'dissatisfied', dissatisfied: 'satisfied', selfish: 'unselfish', unselfish: 'selfish',
+  sensitive: 'insensitive', insensitive: 'sensitive', sincere: 'insincere', insincere: 'sincere',
+  sufficient: 'insufficient', insufficient: 'sufficient', tidy: 'untidy', untidy: 'tidy',
+  true: 'untrue', untrue: 'true', usual: 'unusual', unusual: 'usual',
+  visible: 'invisible', invisible: 'visible', willing: 'unwilling', unwilling: 'willing',
+  wise: 'unwise', unwise: 'wise', tolerant: 'intolerant', intolerant: 'tolerant',
+  capable: 'incapable', incapable: 'capable', active: 'inactive', inactive: 'active',
+  formal: 'informal', informal: 'formal', convenient: 'inconvenient', inconvenient: 'convenient',
+  direct: 'indirect', indirect: 'direct', dependent: 'independent', independent: 'dependent',
+  complete: 'incomplete', incomplete: 'complete', accurate: 'inaccurate', inaccurate: 'accurate',
+  adequate: 'inadequate', inadequate: 'adequate', appropriate: 'inappropriate', inappropriate: 'appropriate',
+  audible: 'inaudible', inaudible: 'audible', credible: 'incredible', incredible: 'credible',
+  decisive: 'indecisive', indecisive: 'decisive', definite: 'indefinite', indefinite: 'definite',
+  efficient: 'inefficient', inefficient: 'efficient', flexible: 'inflexible', inflexible: 'flexible',
+  frequent: 'infrequent', infrequent: 'frequent', human: 'inhuman', inhuman: 'human',
+  secure: 'insecure', insecure: 'secure', sane: 'insane', insane: 'sane',
+  stable: 'unstable', unstable: 'stable', valid: 'invalid', invalid: 'valid',
+  good: 'bad', bad: 'good', big: 'small', small: 'big', large: 'small',
+  right: 'wrong', wrong: 'right', present: 'absent', absent: 'present',
+  alive: 'dead', dead: 'alive', guilty: 'innocent', innocent: 'guilty',
+  brave: 'cowardly', cowardly: 'brave', rich: 'poor', poor: 'rich',
+  strong: 'weak', weak: 'strong', beautiful: 'ugly', ugly: 'beautiful',
+  generous: 'mean', careful: 'careless', careless: 'careful',
+  hopeful: 'hopeless', hopeless: 'hopeful', useful: 'useless', useless: 'useful',
+  harmful: 'harmless', harmless: 'harmful', successful: 'unsuccessful', unsuccessful: 'successful',
+  wide: 'narrow', narrow: 'wide', deep: 'shallow', shallow: 'deep',
+  hard: 'soft', soft: 'hard', easy: 'difficult', difficult: 'easy',
+  early: 'late', late: 'early', old: 'young', young: 'old', tall: 'short', short: 'tall',
+  fast: 'slow', slow: 'fast', high: 'low', low: 'high', long: 'short', hot: 'cold', cold: 'hot',
+  full: 'empty', empty: 'full', loud: 'quiet', quiet: 'loud', clever: 'stupid', stupid: 'clever',
+  diligent: 'lazy', lazy: 'diligent', healthy: 'unhealthy', unhealthy: 'healthy'
+};
+
+/* ---------- Narration (Direct <-> Indirect Speech) tables ---------- */
+const PRONOUN_MAP_BY_SPEAKER = {
+  '3rd-m': { i: 'he', me: 'him', my: 'his', mine: 'his', myself: 'himself', we: 'they', us: 'them', our: 'their', ours: 'theirs', ourselves: 'themselves' },
+  '3rd-f': { i: 'she', me: 'her', my: 'her', mine: 'hers', myself: 'herself', we: 'they', us: 'them', our: 'their', ours: 'theirs', ourselves: 'themselves' },
+  '3rd-p': { i: 'they', me: 'them', my: 'their', mine: 'theirs', myself: 'themselves', we: 'they', us: 'them', our: 'their', ours: 'theirs', ourselves: 'themselves' },
+  '1st': { i: 'I', me: 'me', my: 'my', mine: 'mine', myself: 'myself', we: 'we', us: 'us', our: 'our', ours: 'ours', ourselves: 'ourselves' }
+};
+const YOU_MAP_BY_OBJECT = {
+  me: { you: 'I', your: 'my', yours: 'mine', yourself: 'myself', yourselves: 'ourselves' },
+  him: { you: 'he', your: 'his', yours: 'his', yourself: 'himself', yourselves: 'themselves' },
+  her: { you: 'she', your: 'her', yours: 'hers', yourself: 'herself', yourselves: 'themselves' },
+  us: { you: 'we', your: 'our', yours: 'ours', yourself: 'ourselves', yourselves: 'ourselves' },
+  them: { you: 'they', your: 'their', yours: 'theirs', yourself: 'themselves', yourselves: 'themselves' }
+};
+
+const TIME_PLACE_MAP = [
+  [/\bnow\b/gi, 'then'], [/\btoday\b/gi, 'that day'], [/\btonight\b/gi, 'that night'],
+  [/\btomorrow\b/gi, 'the next day'], [/\byesterday\b/gi, 'the day before'],
+  [/\bthis\s+week\b/gi, 'that week'], [/\bnext\s+week\b/gi, 'the following week'],
+  [/\blast\s+week\b/gi, 'the previous week'], [/\bthis\s+year\b/gi, 'that year'],
+  [/\bhere\b/gi, 'there'], [/\bago\b/gi, 'before'],
+  [/\bthese\b/gi, 'those'], [/\bthis\b/gi, 'that'],
+  [/\bcome\b/gi, 'go'], [/\bcomes\b/gi, 'goes'], [/\bcame\b/gi, 'went']
+];
+
+/* ---------- Dropdown options (both From and To use the same list) ---------- */
+const SENTENCE_TYPES = [
+  { group: 'Polarity', options: [['affirmative', 'Affirmative'], ['negative', 'Negative']] },
+  { group: 'Sentence type', options: [['assertive', 'Assertive'], ['interrogative', 'Interrogative'], ['imperative', 'Imperative'], ['exclamatory', 'Exclamatory'], ['optative', 'Optative']] },
+  { group: 'Voice', options: [['active', 'Active Voice'], ['passive', 'Passive Voice']] },
+  { group: 'Narration', options: [['direct', 'Direct Speech'], ['indirect', 'Indirect Speech']] },
+  { group: 'Structure', options: [['simple', 'Simple'], ['complex', 'Complex'], ['compound', 'Compound']] }
+];
+const TYPE_LABEL = {
+  affirmative: 'Affirmative', negative: 'Negative', assertive: 'Assertive', interrogative: 'Interrogative',
+  imperative: 'Imperative', exclamatory: 'Exclamatory', optative: 'Optative', active: 'Active Voice',
+  passive: 'Passive Voice', direct: 'Direct Speech', indirect: 'Indirect Speech',
+  simple: 'Simple', complex: 'Complex', compound: 'Compound'
+};
+/* How each type reads in the sentence "When converting ___ into ___:" */
+const TYPE_PHRASE = {
+  affirmative: 'an affirmative sentence', negative: 'a negative sentence', assertive: 'an assertive sentence',
+  interrogative: 'an interrogative sentence', imperative: 'an imperative sentence', exclamatory: 'an exclamatory sentence',
+  optative: 'an optative sentence', active: 'an active-voice sentence', passive: 'a passive-voice sentence',
+  direct: 'direct speech', indirect: 'indirect speech', simple: 'a simple sentence', complex: 'a complex sentence', compound: 'a compound sentence'
+};
+/* The natural "other side" of each type — used to auto-fill the To box when the pair isn't valid. */
+const DEFAULT_COUNTERPART = {
+  affirmative: 'negative', negative: 'affirmative', assertive: 'interrogative', interrogative: 'assertive',
+  imperative: 'assertive', exclamatory: 'assertive', optative: 'assertive', active: 'passive', passive: 'active',
+  direct: 'indirect', indirect: 'direct', simple: 'complex', complex: 'simple', compound: 'simple'
+};
+
+/* ---------- Reference rules shown in the Rules panel (one set per conversion family) ---------- */
+const GRAMMAR_RULES = {
+  'affirmative-negative': {
+    title: `Affirmative ↔ Negative`,
+    points: [
+      `If the sentence has an **auxiliary verb** (is, am, are, was, were, has, have, had, can, could, will, would, shall, should, may, might, must), put **not** right after it to make the sentence negative — and take it out to make it affirmative again. ("He can swim." → "He cannot swim.")`,
+      `If there is **no auxiliary verb** (simple present or simple past), use **do / does / did + not** with the *base form* of the verb. ("He plays football." → "He does not play football.")`,
+      `**only → none but** — "Only Rahim can solve it." ↔ "None but Rahim can solve it."`,
+      `**everybody / everyone / every + noun → nobody** — rewrite as "There is nobody who does not …": "Everybody loves honesty." ↔ "There is nobody who does not love honesty."`,
+      `**always → never** — with an adjective, use the opposite adjective ("He is always honest." ↔ "He is never dishonest."); with a verb, use *never fails to* ("He always tells the truth." ↔ "He never fails to tell the truth.").`,
+      `**too … to → so … that … not** — "He is too weak to walk." ↔ "He is so weak that he cannot walk."`,
+      `To keep the *meaning* positive while the *grammar* becomes negative, put **not** before the **opposite (antonym)** of the adjective — "He is an honest boy." ↔ "He is not a dishonest boy."`
+    ]
+  },
+  'assertive-interrogative': {
+    title: `Assertive ↔ Interrogative`,
+    points: [
+      `An **affirmative** assertive sentence becomes a **negative interrogative**: move the auxiliary verb to the front, add *not* (usually as *n't*), and end with a question mark. ("He is honest." → "Isn't he honest?")`,
+      `A **negative** assertive sentence becomes a **positive interrogative**: move the auxiliary to the front and drop *not*. ("He is not honest." → "Is he honest?")`,
+      `With **no auxiliary verb**, bring in **Do / Does / Did** (as *don't / doesn't / didn't* for affirmatives) and use the base form of the verb. ("He plays football." → "Doesn't he play football?")`,
+      `End with a **question mark (?)** instead of a full stop.`,
+      `**Reverse (Interrogative → Assertive):** put the subject back before the auxiliary. A negative question becomes an affirmative statement; a positive question becomes a negative statement.`
+    ]
+  },
+  'assertive-imperative': {
+    title: `Assertive ↔ Imperative`,
+    points: [
+      `"You should / must + verb" ↔ a **command**: start directly with the base verb — the subject "you" is understood. ("You should obey your parents." ↔ "Obey your parents.")`,
+      `"You should / must **not** + verb" ↔ **Do not + verb**; "You must **never** + verb" ↔ **Never + verb**. ("You must not tell a lie." ↔ "Do not tell a lie.")`,
+      `"I request you to + verb" or "You are requested to + verb" ↔ **Please + verb** (a polite request). ("I request you to help me." ↔ "Please help me.")`,
+      `"I advise / order you to + verb" ↔ a plain command. ("I advise you to work hard." ↔ "Work hard.")`,
+      `"We should + verb" ↔ **Let us + verb**.`
+    ]
+  },
+  'assertive-exclamatory': {
+    title: `Assertive ↔ Exclamatory`,
+    points: [
+      `"It is a very [adjective] [noun]." ↔ **"What a/an [adjective] [noun] it is!"** — drop *very*, begin with *What*, and move the subject and verb to the end.`,
+      `"[Subject] is very [adjective]." ↔ **"How [adjective] [subject] is!"** — drop *very*, begin with *How*.`,
+      `Use **an** instead of **a** when the adjective starts with a vowel sound: "What **an** honest man he is!"`,
+      `Exclamatory sentences end with an **exclamation mark (!)**.`
+    ]
+  },
+  'assertive-optative': {
+    title: `Assertive ↔ Optative`,
+    points: [
+      `Optative sentences express a **wish, prayer or hope**, and usually begin with **May**.`,
+      `"I pray / wish / hope that + subject + may + verb." ↔ **"May + subject + verb …!"** — "I pray that you may live long." ↔ "May you live long!"`,
+      `"I wish you + noun phrase." ↔ **"May you have + noun phrase!"** — "I wish you a happy new year." ↔ "May you have a happy new year!"`,
+      `Optative sentences end with an **exclamation mark (!)**.`
+    ]
+  },
+  'active-passive': {
+    title: `Active ↔ Passive Voice`,
+    points: [
+      `The **object** of the active sentence becomes the **subject** of the passive sentence.`,
+      `The verb becomes **a form of "be" + past participle**, in the same tense as the original: *writes → is written*, *wrote → was written*, *will write → will be written*, *is writing → is being written*, *has written → has been written*.`,
+      `The "be" verb agrees with the **new subject** (the old object) — singular or plural.`,
+      `The original subject moves to the end after **by**; pronouns change to object form (*he → him*, *they → them*).`,
+      `Only sentences with a **direct object** (transitive verbs) can be made passive.`
+    ]
+  },
+  'direct-indirect': {
+    title: `Direct ↔ Indirect Speech (Narration)`,
+    points: [
+      `Remove the quotation marks and join the reported words with **that** (statements), **if / whether** (yes/no questions), or the **question word** (wh-questions).`,
+      `**Pronouns** change by meaning: "I / we" become the person who spoke; "you" becomes the person spoken to. (He said to me, 'I am happy.' → He told me that he was happy.)`,
+      `If the reporting verb is **past** (said, told, asked), shift the tense **one step back**: am/is → was, are → were, go → went, went → had gone, will → would, can → could, may → might, must → had to. If it is **present** (says, tells), no shift is needed.`,
+      `**Time and place words** change after a past reporting verb: now → then, today → that day, tomorrow → the next day, yesterday → the day before, here → there, this → that.`,
+      `**Questions** return to normal statement order — drop do/does/did and the question mark. ("Where do you live?" → "where I lived")`,
+      `**Commands and requests** become **to + base verb** with *told / ordered / requested*: "Go now." → "told me to go then"; "Do not go." → "told me not to go"; "Please help me." → "requested me to help him."`,
+      `**say → tell** when a listener is named: *said to me* → *told me*.`,
+      `**Reverse (Indirect → Direct):** put the words back in quotation marks, turn the pronouns back, move the tense one step forward again (was → is, would → will, had gone → went), and restore time words (then → now, the next day → tomorrow).`
+    ]
+  },
+  'sentence-structure': {
+    title: `Simple ↔ Complex ↔ Compound`,
+    points: [
+      `A **simple** sentence has **one** subject-verb pair (one clause); extra ideas appear as phrases.`,
+      `A **complex** sentence has a main clause plus a **subordinate clause** introduced by *as / because / since / although / though / when*.`,
+      `A **compound** sentence has two independent clauses joined by **so / but / and**.`,
+      `**Reason:** *Being ill, he could not come.* (simple) ↔ *As he was ill, he could not come.* (complex) ↔ *He was ill, so he could not come.* (compound)`,
+      `**Contrast:** *In spite of being poor, he is honest.* (simple) ↔ *Although he is poor, he is honest.* (complex) ↔ *He is poor, but he is honest.* (compound)`,
+      `**Time:** *On seeing the tiger, he ran away.* (simple) ↔ *When he saw the tiger, he ran away.* (complex) ↔ *He saw the tiger and he ran away.* (compound)`,
+      `**Result:** *too … to …* and *… enough to …* (simple) ↔ *so … that …* (complex).`
+    ]
+  }
+};
+
+/* Signal words shown under Affirmative <-> Negative */
+const SIGNAL_WORDS = [
+  ['only', 'none but', 'Only Rahim can do it. ↔ None but Rahim can do it.'],
+  ['everybody / everyone / every + noun', 'nobody / no one / no + noun … who … not', 'Everybody loves honesty. ↔ There is nobody who does not love honesty.'],
+  ['always', 'never  (+ opposite adjective, or "fails to")', 'He is always late. ↔ He is never early.'],
+  ['too … to …', 'so … that … cannot …', 'He is too weak to walk. ↔ He is so weak that he cannot walk.']
+];
+
+/* Which numbered rule points (in GRAMMAR_RULES[category].points) each engine rule corresponds to — used to highlight "this rule was applied". */
+const RULE_POINTS = {
+  'aux-not': [0], 'remove-not': [0], 'do-support': [1], 'remove-do-support': [1],
+  'only-none-but': [2], 'none-but-only': [2], 'everybody-nobody': [3], 'nobody-everybody': [3],
+  'always-never': [4], 'never-always': [4], 'too-to-so-that': [5], 'so-that-too-to': [5],
+  'antonym-negative': [6], 'antonym-affirmative': [6],
+  'assertive-to-interrogative': [0, 1, 3], 'assertive-to-interrogative-do': [2, 3],
+  'interrogative-to-assertive': [4], 'interrogative-to-assertive-do': [4],
+  'assertive-to-imperative-plain': [0], 'assertive-to-imperative-negative': [1], 'assertive-to-imperative-request': [2, 3], 'assertive-to-imperative-let': [4],
+  'imperative-to-assertive-plain': [0], 'imperative-to-assertive-negative': [1], 'imperative-to-assertive-request': [2], 'imperative-to-assertive-let': [4],
+  'assertive-to-exclamatory-what': [0, 2, 3], 'assertive-to-exclamatory-how': [1, 3],
+  'exclamatory-to-assertive-what': [0], 'exclamatory-to-assertive-how': [1],
+  'assertive-to-optative': [0, 1, 3], 'assertive-to-optative-wish': [2, 3], 'optative-to-assertive': [1], 'optative-to-assertive-wish': [2],
+  'active-to-passive': [0, 1, 2, 3, 4], 'passive-to-active': [0, 1, 2, 3],
+  'direct-to-indirect-statement': [0, 1, 2, 3, 6], 'direct-to-indirect-yesno': [0, 1, 2, 3, 4], 'direct-to-indirect-wh': [0, 1, 2, 3, 4], 'direct-to-indirect-command': [5, 1, 3, 6],
+  'indirect-to-direct-statement': [7], 'indirect-to-direct-yesno': [7, 4], 'indirect-to-direct-wh': [7, 4], 'indirect-to-direct-command': [7, 5],
+  'structure-cause': [3], 'structure-concession': [4], 'structure-time': [5], 'structure-degree': [6]
+};
+
+/* Pattern formulas (left = From pattern, right = To pattern) for each engine rule. */
+const FORMULAS = {
+  'aux-not': [['Subject + auxiliary verb + …', 'Subject + auxiliary verb + not + …']],
+  'remove-not': [['Subject + auxiliary verb + not + …', 'Subject + auxiliary verb + …']],
+  'do-support': [['Subject + verb (simple present / past) + …', 'Subject + do / does / did + not + base verb + …']],
+  'remove-do-support': [['Subject + do / does / did + not + base verb + …', 'Subject + verb (simple present / past) + …']],
+  'only-none-but': [['Only + subject + verb + …', 'None but + subject + verb + …']],
+  'none-but-only': [['None but + subject + verb + …', 'Only + subject + verb + …']],
+  'everybody-nobody': [['Everybody / Everyone / Every + noun + verb + …', 'There is nobody / no one / no + noun + who + does not + verb + …']],
+  'nobody-everybody': [['There is nobody / no one / no + noun + who + does not + verb + …', 'Everybody / Everyone / Every + noun + verb + …']],
+  'always-never': [['Subject + be + always + adjective', 'Subject + be + never + opposite adjective'], ['Subject + always + verb + …', 'Subject + never + fails to + verb + …']],
+  'never-always': [['Subject + be + never + adjective', 'Subject + be + always + opposite adjective'], ['Subject + never + fails to + verb + …', 'Subject + always + verb + …']],
+  'too-to-so-that': [['Subject + be + too + adjective + to + verb', 'Subject + be + so + adjective + that + subject + cannot + verb']],
+  'so-that-too-to': [['Subject + be + so + adjective + that + subject + cannot + verb', 'Subject + be + too + adjective + to + verb']],
+  'antonym-negative': [['Subject + be + a/an + adjective + noun', 'Subject + be + not + a/an + opposite adjective + noun']],
+  'antonym-affirmative': [['Subject + be + not + a/an + opposite adjective + noun', 'Subject + be + a/an + adjective + noun']],
+  'active-to-passive': [['Subject + verb + object', 'Object + be (same tense) + past participle + by + subject']],
+  'passive-to-active': [['Object + be (same tense) + past participle + by + subject', 'Subject + verb + object']],
+  'assertive-to-interrogative': [['Subject + auxiliary + … (affirmative)', "Auxiliary + n't + subject + … ?"], ['Subject + auxiliary + not + … (negative)', 'Auxiliary + subject + … ?']],
+  'assertive-to-interrogative-do': [['Subject + verb + …', "Don't / Doesn't / Didn't + subject + base verb + … ?"]],
+  'interrogative-to-assertive': [["Auxiliary + n't + subject + … ?", 'Subject + auxiliary + … .'], ['Auxiliary + subject + … ?', 'Subject + auxiliary + not + … .']],
+  'interrogative-to-assertive-do': [["Don't / Doesn't / Didn't + subject + base verb + … ?", 'Subject + verb + … .']],
+  'assertive-to-imperative-plain': [['You + should / must + base verb + …', 'Base verb + … .']],
+  'assertive-to-imperative-negative': [['You + should / must + not (never) + base verb + …', 'Do not (Never) + base verb + … .']],
+  'assertive-to-imperative-request': [['I request you to + base verb + …', 'Please + base verb + … .']],
+  'assertive-to-imperative-let': [['We + should + base verb + …', 'Let us + base verb + … .']],
+  'imperative-to-assertive-plain': [['Base verb + … .', 'You + should + base verb + …']],
+  'imperative-to-assertive-negative': [['Do not (Never) + base verb + … .', 'You + must + not (never) + base verb + …']],
+  'imperative-to-assertive-request': [['Please + base verb + … .', 'I request you to + base verb + …']],
+  'imperative-to-assertive-let': [['Let us + base verb + … .', 'We + should + base verb + …']],
+  'assertive-to-exclamatory-what': [['Subject + be + a/an + very + adjective + noun', 'What + a/an + adjective + noun + subject + be + !']],
+  'assertive-to-exclamatory-how': [['Subject + be + very + adjective', 'How + adjective + subject + be + !']],
+  'exclamatory-to-assertive-what': [['What + a/an + adjective + noun + subject + be + !', 'Subject + be + a + very + adjective + noun']],
+  'exclamatory-to-assertive-how': [['How + adjective + subject + be + !', 'Subject + be + very + adjective']],
+  'assertive-to-optative': [['I pray / wish / hope that + subject + may + verb + …', 'May + subject + verb + … !']],
+  'assertive-to-optative-wish': [['I wish you + noun phrase', 'May you have + noun phrase !']],
+  'optative-to-assertive': [['May + subject + verb + … !', 'I pray that + subject + may + verb + …']],
+  'optative-to-assertive-wish': [['May you have + noun phrase !', 'I wish you + noun phrase']],
+  'direct-to-indirect-statement': [['Subject + said (to + listener), "I / we / you … (present or past)"', 'Subject + said / told + listener + that + pronoun-adjusted clause (tense shifted back)']],
+  'direct-to-indirect-yesno': [['Subject + asked, "Auxiliary + subject + … ?"', 'Subject + asked + if / whether + subject + verb … (statement order)']],
+  'direct-to-indirect-wh': [['Subject + asked, "Wh-word + auxiliary + subject + … ?"', 'Subject + asked + wh-word + subject + verb … (statement order)']],
+  'direct-to-indirect-command': [['Subject + said / told, "Base verb + …"', 'Subject + told / requested + listener + to + base verb + …']],
+  'indirect-to-direct-statement': [['Subject + said / told + listener + that + clause', 'Subject + said (to + listener), "clause with pronouns and tense restored"']],
+  'indirect-to-direct-yesno': [['Subject + asked + if / whether + subject + verb …', 'Subject + asked, "Auxiliary + subject + … ?"']],
+  'indirect-to-direct-wh': [['Subject + asked + wh-word + subject + verb …', 'Subject + asked, "Wh-word + auxiliary + subject + … ?"']],
+  'indirect-to-direct-command': [['Subject + told / requested + listener + to + base verb + …', 'Subject + said, "Base verb + …"']]
+};
+/* Structure formulas depend on the relation and the form (simple / complex / compound). */
+const STRUCTURE_FORMULAS = {
+  cause: {
+    simple: 'Being + adjective / noun phrase, + main clause',
+    complex: 'As / Because / Since + subject + be + adjective / noun phrase, + main clause',
+    compound: 'Subject + be + adjective / noun phrase, so + main clause'
+  },
+  concession: {
+    simple: 'In spite of being + adjective / noun phrase, + main clause',
+    complex: 'Although / Though + subject + be + adjective / noun phrase, + main clause',
+    compound: 'Subject + be + adjective / noun phrase, but + main clause'
+  },
+  time: {
+    simple: 'On + verb-ing + …, + main clause',
+    complex: 'When + subject + past verb + …, + main clause',
+    compound: 'Subject + past verb + … and + main clause'
+  },
+  degree: {
+    simple: 'Subject + be + too + adjective + to + verb   /   Subject + be + adjective + enough + to + verb',
+    complex: 'Subject + be + so + adjective + that + subject + cannot / can + verb'
+  }
+};
+
+/* Example sentences the user can click to try (each is verified by the test-suite). */
+const EXAMPLES = [
+  { from: 'affirmative', to: 'negative', sentence: 'He is an honest boy.' },
+  { from: 'affirmative', to: 'negative', sentence: 'Everybody loves honesty.' },
+  { from: 'affirmative', to: 'negative', sentence: 'He always tells the truth.' },
+  { from: 'affirmative', to: 'negative', sentence: 'He is too weak to walk.' },
+  { from: 'negative', to: 'affirmative', sentence: 'She does not play football.' },
+  { from: 'assertive', to: 'interrogative', sentence: 'He is honest.' },
+  { from: 'assertive', to: 'imperative', sentence: 'You must not tell a lie.' },
+  { from: 'assertive', to: 'exclamatory', sentence: 'It is a very beautiful flower.' },
+  { from: 'assertive', to: 'optative', sentence: 'I pray that you may live long.' },
+  { from: 'active', to: 'passive', sentence: 'The cat chased the mouse.' },
+  { from: 'passive', to: 'active', sentence: 'A letter was written by Rahim.' },
+  { from: 'direct', to: 'indirect', sentence: 'He said to me, "I am very happy today."' },
+  { from: 'indirect', to: 'direct', sentence: 'She asked him where he lived.' },
+  { from: 'simple', to: 'complex', sentence: 'Being ill, he could not attend the class.' },
+  { from: 'complex', to: 'compound', sentence: 'Although he is poor, he is honest.' }
+];
+
+
+/* ========================================================================== */
+/* 1B. GRAMMAR ENGINE                                                         */
+/* ========================================================================== */
+
+/**
+ * The transformation engine, built in layers:
+ *   1. Tokenizer and verb conjugation
+ *   2. Sentence analysis (finding the subject, verb and auxiliary)
+ *   3. One function per From/To conversion
+ * When a sentence does not match a known pattern, the engine says so instead of guessing.
+ */
+
+const GrammarEngine = (function () {
+  'use strict';
+
+  /* ---------- Verb vocabulary ---------- */
+  const COMMON_REGULAR_VERBS = [
+    'play', 'walk', 'talk', 'watch', 'listen', 'open', 'close', 'help', 'ask', 'answer',
+    'believe', 'want', 'need', 'like', 'love', 'hate', 'live', 'work', 'study', 'learn',
+    'cook', 'clean', 'wash', 'paint', 'call', 'wait', 'start', 'finish', 'stop', 'plan',
+    'arrive', 'happen', 'change', 'move', 'turn', 'wonder', 'remember', 'explain', 'describe',
+    'imagine', 'decide', 'prefer', 'hope', 'wish', 'promise', 'agree', 'refuse', 'accept',
+    'admire', 'respect', 'enjoy', 'visit', 'travel', 'attend', 'invite', 'thank', 'greet',
+    'smile', 'laugh', 'cry', 'shout', 'whisper', 'jump', 'climb', 'push', 'pull', 'carry',
+    'follow', 'lead', 'guide', 'protect', 'save', 'rescue', 'destroy', 'damage', 'repair',
+    'produce', 'create', 'design', 'develop', 'improve', 'reduce', 'increase', 'prepare',
+    'organize', 'manage', 'control', 'test', 'check', 'measure', 'count', 'calculate',
+    'collect', 'gather', 'share', 'divide', 'join', 'connect', 'separate', 'compare',
+    'consider', 'suggest', 'recommend', 'advise', 'warn', 'remind', 'inform', 'announce',
+    'report', 'discuss', 'argue', 'complain', 'apologize', 'welcome',
+    'trust', 'doubt', 'fear', 'worry', 'appreciate',
+    'kill', 'murder', 'attack', 'defend', 'fight', 'arrest', 'punish', 'reward', 'praise',
+    'blame', 'accuse', 'forgive', 'excuse', 'allow', 'permit', 'forbid', 'ban',
+    'chase', 'capture', 'release', 'free', 'guard', 'observe', 'monitor', 'supervise',
+    'direct', 'obey', 'disobey', 'ignore', 'solve', 'complete', 'build', 'fix',
+    'serve', 'deliver', 'borrow', 'lend', 'return', 'receive', 'offer', 'provide', 'supply',
+    'plant', 'grow', 'harvest', 'manufacture', 'construct', 'demolish', 'draw',
+    'celebrate', 'honor', 'criticize', 'notify', 'declare', 'publish', 'print', 'compose',
+    'invent', 'discover', 'explore', 'examine', 'inspect', 'investigate', 'analyze',
+    'question', 'interview', 'define', 'illustrate', 'demonstrate', 'prove', 'confirm',
+    'verify', 'weigh', 'compute', 'earn', 'spend', 'save', 'donate', 'contribute',
+    'insult', 'encourage', 'discourage', 'motivate', 'inspire', 'impress', 'disappoint',
+    'satisfy', 'please', 'annoy', 'irritate', 'frighten', 'scare', 'shock', 'surprise',
+    'amaze', 'astonish', 'confuse', 'convince', 'persuade', 'force', 'require', 'request',
+    'demand', 'insist', 'expect', 'assume', 'guess', 'realize', 'recognize', 'identify',
+    'select', 'choose', 'pick', 'gain', 'lose', 'obtain', 'acquire', 'possess', 'own',
+    'enter', 'exit', 'cross', 'reach', 'pass', 'touch', 'hug', 'kiss', 'marry', 'divorce',
+    'raise', 'lower', 'lift', 'drop', 'throw', 'roll', 'bend', 'fold', 'wrap', 'tie', 'untie',
+    'bless', 'prosper', 'succeed', 'flourish', 'prevail', 'rest', 'grant', 'heal', 'cure', 'shower', 'curse', 'perish', 'reign', 'triumph', 'obey', 'respect', 'reach', 'fail'
+  ];
+
+  function computeRegularForm(base) {
+    const endsConsonantY = /[^aeiou]y$/.test(base);
+    const endsE = /e$/.test(base) && !/ee$|oe$|ye$/.test(base);
+    const shortCVC = /^[a-z]*[^aeiouwxy][aeiou][bcdfgklmnprstvz]$/.test(base) && base.length <= 6;
+
+    let past;
+    if (endsConsonantY) past = base.slice(0, -1) + 'ied';
+    else if (endsE) past = base + 'd';
+    else if (shortCVC) past = base + base.slice(-1) + 'ed';
+    else past = base + 'ed';
+
+    let ing;
+    if (/ie$/.test(base)) ing = base.slice(0, -2) + 'ying';
+    else if (endsE) ing = base.slice(0, -1) + 'ing';
+    else if (shortCVC) ing = base + base.slice(-1) + 'ing';
+    else ing = base + 'ing';
+
+    let s;
+    if (/[sxz]$|[sc]h$/.test(base)) s = base + 'es';
+    else if (endsConsonantY) s = base.slice(0, -1) + 'ies';
+    else if (base === 'go') s = 'goes';
+    else s = base + 's';
+
+    return { past, pp: past, ing, s };
+  }
+
+  const VERB_FORMS = {};
+  Object.keys(IRREGULAR_VERBS).forEach(base => {
+    const v = IRREGULAR_VERBS[base];
+    const reg = computeRegularForm(base);
+    VERB_FORMS[base] = { past: v.past, pp: v.pp, ing: reg.ing, s: reg.s };
+  });
+  Object.keys(SPECIAL_REGULAR_VERBS).forEach(base => {
+    const v = SPECIAL_REGULAR_VERBS[base];
+    const reg = computeRegularForm(base);
+    VERB_FORMS[base] = { past: v.past, pp: v.pp, ing: reg.ing, s: reg.s };
+  });
+  COMMON_REGULAR_VERBS.forEach(base => {
+    if (VERB_FORMS[base]) return;
+    const reg = computeRegularForm(base);
+    VERB_FORMS[base] = { past: reg.past, pp: reg.pp, ing: reg.ing, s: reg.s };
+  });
+
+  const REVERSE_VERB = {};
+  Object.keys(VERB_FORMS).forEach(base => {
+    const f = VERB_FORMS[base];
+    REVERSE_VERB[base] = { base, tense: 'base' };
+    REVERSE_VERB[f.s] = { base, tense: 'present3s' };
+    REVERSE_VERB[f.past] = { base, tense: 'past' };
+    REVERSE_VERB[f.pp] = { base, tense: 'pp' };
+    REVERSE_VERB[f.ing] = { base, tense: 'ing' };
+  });
+
+  function conjugate(base, form) {
+    base = base.toLowerCase();
+    const f = VERB_FORMS[base] || (function () { const r = computeRegularForm(base); return { past: r.past, pp: r.pp, ing: r.ing, s: r.s }; })();
+    if (form === 'base') return base;
+    if (form === 'past') return f.past;
+    if (form === 'pp') return f.pp;
+    if (form === 'ing') return f.ing;
+    if (form === 's') return f.s;
+    return base;
+  }
+
+  function recognizeVerb(token) {
+    const t = token.toLowerCase().replace(/[^a-z']/g, '');
+    if (!t) return null;
+    return REVERSE_VERB[t] || null;
+  }
+
+  /* ---------- Tokenizer & capitalization ---------- */
+  function tokenize(sentence) {
+    return String(sentence).trim().match(/[A-Za-z0-9]+(?:['\-][A-Za-z0-9]+)*|[.,!?;:"]/g) || [];
+  }
+  function spacingFlags(tokens) {
+    const flags = [];
+    let inQuote = false, noSpaceNext = false;
+    tokens.forEach((tok, i) => {
+      if (tok === '"') {
+        if (!inQuote) { flags.push(i !== 0); inQuote = true; noSpaceNext = true; }
+        else { flags.push(false); inQuote = false; }
+        return;
+      }
+      if (i === 0) { flags.push(false); return; }
+      if (/^[.,!?;:]$/.test(tok)) { flags.push(false); return; }
+      if (noSpaceNext) { flags.push(false); noSpaceNext = false; return; }
+      flags.push(true);
+    });
+    return flags;
+  }
+  function detokenize(tokens) {
+    const f = spacingFlags(tokens);
+    return tokens.map((t, i) => (f[i] ? ' ' : '') + t).join('');
+  }
+  function capitalizeFirst(str) { return str.charAt(0).toUpperCase() + str.slice(1); }
+
+  const ALWAYS_LOWERCASE_MIDSENTENCE = ['the', 'a', 'an', 'he', 'she', 'it', 'they', 'we', 'you',
+    'by', 'in', 'on', 'at', 'with', 'to', 'of', 'for', 'from', 'and', 'but', 'or', 'so', 'if', 'that',
+    'what', 'where', 'when', 'why', 'how', 'who', 'whom', 'whose', 'which',
+    'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being', 'has', 'have', 'had',
+    'do', 'does', 'did', 'will', 'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must', 'not'];
+  function fixCapitalization(tokens) {
+    const out = tokens.map((tok, i) => {
+      if (i === 0) return tok;
+      if (ALWAYS_LOWERCASE_MIDSENTENCE.indexOf(tok.toLowerCase()) !== -1) return tok.toLowerCase();
+      return tok;
+    });
+    if (out.length) out[0] = capitalizeFirst(out[0]);
+    for (let i = 0; i < out.length; i++) if (out[i].toLowerCase() === 'i') out[i] = 'I';
+    return out;
+  }
+
+  const AN_NEEDS_A = ['usual', 'unique', 'university', 'uniform', 'user', 'european', 'unicorn', 'union', 'one'];
+  const A_NEEDS_AN = ['honest', 'honor', 'honour', 'hour', 'heir'];
+  function articleFor(word) {
+    const w = String(word).toLowerCase();
+    if (AN_NEEDS_A.some(e => w.indexOf(e) === 0)) return 'a';
+    if (A_NEEDS_AN.some(e => w.indexOf(e) === 0)) return 'an';
+    return /^[aeiou]/.test(w) ? 'an' : 'a';
+  }
+
+  /* ---------- Sentence analysis ---------- */
+  function findAuxiliaryIndex(tokens) {
+    const lower = tokens.map(t => t.toLowerCase());
+    for (let i = 0; i < tokens.length; i++) if (AUXILIARIES.indexOf(lower[i]) !== -1) return i;
+    return -1;
+  }
+  const NP_DETERMINERS = ['the', 'a', 'an', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'this', 'that', 'these', 'those', 'some', 'any', 'no', 'every', 'each', 'another'];
+  function findMainVerbIndex(tokens, from) {
+    from = from || 0;
+    for (let i = from; i < tokens.length; i++) {
+      // a word straight after "the / a / my …" or an adjective is a noun, even if it can also be a verb (the work, a plan)
+      if (i > 0) { const prev = tokens[i - 1].toLowerCase(); if (NP_DETERMINERS.indexOf(prev) !== -1 || ANTONYMS[prev]) continue; }
+      const info = recognizeVerb(tokens[i]);
+      if (info) return { index: i, info };
+    }
+    return null;
+  }
+
+  /** Where does the noun phrase at the start of `tokens` end? ("the boy", "the old man", "your name", "Rahim", "he") */
+  function nounPhraseExtent(tokens) {
+    if (!tokens.length) return 0;
+    const t0 = tokens[0].toLowerCase();
+    if (SUBJECT_CLASS[t0] !== undefined) return 1;
+    if (NP_DETERMINERS.indexOf(t0) !== -1) {
+      let i = 1;
+      while (i < tokens.length - 1 && ANTONYMS[tokens[i].toLowerCase()]) i++;
+      let n = Math.min(i + 1, tokens.length);
+      if ((tokens[n] || '').toLowerCase() === 'of') n += 1 + nounPhraseExtent(tokens.slice(n + 1));
+      return n;
+    }
+    return 1;
+  }
+
+  /** "past" | "present3s" | "present" for a simple-tense verb — resolves read/put/cut/hit… (same form in present and past). */
+  const PAST_MARKERS = ['yesterday', 'ago', 'last', 'once', 'earlier', 'formerly'];
+  function simpleTenseOf(tokens, verbIdx, info) {
+    const form = tokens[verbIdx].toLowerCase();
+    const f = VERB_FORMS[info.base];
+    const ambiguous = !!f && f.past === info.base && form === info.base;
+    if (!ambiguous) {
+      if (info.tense === 'past' || info.tense === 'pp') return 'past';
+      return info.tense === 'present3s' ? 'present3s' : 'present';
+    }
+    if (tokens.some(t => PAST_MARKERS.indexOf(t.toLowerCase()) !== -1)) return 'past';
+    const subj = tokens.slice(0, verbIdx);
+    const last = (subj[subj.length - 1] || '').toLowerCase();
+    const plural = ['i', 'you', 'we', 'they'].indexOf(last) !== -1 || isPluralSubject(subj);
+    return plural ? 'present' : 'past'; // a singular subject with no -s on the verb can only be past
+  }
+  function stripPunctuation(tokens) {
+    const trail = [];
+    const body = tokens.slice();
+    while (body.length && /^[.,!?;:]$/.test(body[body.length - 1])) trail.unshift(body.pop());
+    return { body, trail };
+  }
+  function lowercaseUnlessI(word) { return word.toLowerCase() === 'i' ? 'I' : word.toLowerCase(); }
+
+  /* ================= 1. Affirmative <-> Negative ================= */
+  const CONTRACTION_EXPANSION = {
+    "isn't": ['is', 'not'], "aren't": ['are', 'not'], "wasn't": ['was', 'not'], "weren't": ['were', 'not'],
+    "hasn't": ['has', 'not'], "haven't": ['have', 'not'], "hadn't": ['had', 'not'],
+    "doesn't": ['does', 'not'], "don't": ['do', 'not'], "didn't": ['did', 'not'],
+    "won't": ['will', 'not'], "wouldn't": ['would', 'not'], "shan't": ['shall', 'not'], "shouldn't": ['should', 'not'],
+    "can't": ['can', 'not'], "couldn't": ['could', 'not'], "mustn't": ['must', 'not'], "mightn't": ['might', 'not'],
+    "mayn't": ['may', 'not'], "cannot": ['can', 'not']
+  };
+  function expandContractions(tokens) {
+    const out = [];
+    tokens.forEach(t => {
+      const e = CONTRACTION_EXPANSION[t.toLowerCase()];
+      if (e) out.push(/^[A-Z]/.test(t) ? capitalizeFirst(e[0]) : e[0], e[1]);
+      else out.push(t);
+    });
+    return out;
+  }
+  function mergeCannot(tokens) {
+    const out = [];
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].toLowerCase() === 'can' && (tokens[i + 1] || '').toLowerCase() === 'not') { out.push(tokens[i] === 'Can' ? 'Cannot' : 'cannot'); i++; }
+      else out.push(tokens[i]);
+    }
+    return out;
+  }
+
+  function affirmativeNegative(rawTokens, toNegative) {
+    const { body: rawBody, trail } = stripPunctuation(rawTokens);
+    const body = expandContractions(rawBody);
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    const finish = out => fixCapitalization(mergeCannot(out).concat(trail));
+
+    if (toNegative) {
+      // --- only -> none but
+      if (lower[0] === 'only') {
+        steps.push(`The sentence begins with **"Only"**: "${body.slice(0, 2).join(' ')} …".`);
+        steps.push(`Replace **"Only"** with **"None but"**. "Only ${body[1] || 'X'}" and "none but ${body[1] || 'X'}" mean the same thing, but "none but" makes the sentence negative in form.`);
+        return { tokens: finish(['None', 'but'].concat(body.slice(1))), rule: 'only-none-but', steps };
+      }
+      // --- too ... to ... -> so ... that ... cannot
+      const tooIdx = lower.indexOf('too');
+      const toIdx = tooIdx !== -1 ? lower.indexOf('to', tooIdx + 1) : -1;
+      if (tooIdx !== -1 && toIdx !== -1 && toIdx > tooIdx + 1) {
+        const auxIdx = findAuxiliaryIndex(body);
+        const subjectEnd = auxIdx !== -1 && auxIdx < tooIdx ? auxIdx : tooIdx;
+        const subject = body.slice(0, subjectEnd);
+        const beWord = auxIdx !== -1 ? body[auxIdx] : 'is';
+        const isPast = /^(was|were)$/i.test(beWord);
+        const adjective = body.slice(tooIdx + 1, toIdx).join(' ');
+        const modalToks = isPast ? ['could', 'not'] : ['cannot'];
+        steps.push(`Find the pattern **"too ${adjective} to …"** in the sentence.`);
+        steps.push(`Rewrite "too ${adjective} to" as **"so ${adjective} that ${subject.map(lowercaseUnlessI).join(' ')} ${modalToks.join(' ')}"** — the subject is repeated after "that".`);
+        steps.push(`Use **${isPast ? '"could not" (the sentence is in the past)' : '"cannot" (the sentence is in the present)'}** before the verb.`);
+        const out = subject.concat([beWord, 'so', adjective, 'that']).concat(subject.map(lowercaseUnlessI)).concat(modalToks).concat(body.slice(toIdx + 1));
+        return { tokens: finish(out), rule: 'too-to-so-that', steps };
+      }
+      // --- everybody / everyone / every + noun -> there is nobody who ... not
+      if (lower[0] === 'everybody' || lower[0] === 'everyone' || (lower[0] === 'every' && body.length > 2)) {
+        const isEvery = lower[0] === 'every';
+        const noun = isEvery ? body[1] : null;
+        const predicate = body.slice(isEvery ? 2 : 1);
+        const pAux = findAuxiliaryIndex(predicate);
+        let tail, isPast;
+        if (pAux === 0) {
+          tail = [predicate[0], 'not'].concat(predicate.slice(1));
+          isPast = /^(was|were|had|did|could|would|might)$/i.test(predicate[0]);
+        } else {
+          const mv = findMainVerbIndex(predicate, 0);
+          if (!mv || mv.index !== 0) return { unrecognized: true, reason: `Couldn't find the verb right after "${body[0]}${isEvery ? ' ' + body[1] : ''}".` };
+          isPast = mv.info.tense === 'past' || mv.info.tense === 'pp';
+          tail = [isPast ? 'did' : 'does', 'not', mv.info.base].concat(predicate.slice(1));
+        }
+        const noWord = isEvery ? ['no', noun.toLowerCase()] : (lower[0] === 'everyone' ? ['no', 'one'] : ['nobody']);
+        steps.push(`Find the universal word **"${isEvery ? 'every ' + noun : body[0]}"** at the start of the sentence.`);
+        steps.push(`Begin with **"There ${isPast ? 'was' : 'is'} ${noWord.join(' ')} who …"** — a double negative ("${noWord.join(' ')} … not") that keeps the meaning positive.`);
+        steps.push(`After "who", put the verb in the negative: **"${tail.slice(0, 2).join(' ')}"** + the rest — ${pAux === 0 ? 'the auxiliary verb takes "not"' : 'do-support with the base form of the verb'}.`);
+        return { tokens: finish(['There', isPast ? 'was' : 'is'].concat(noWord).concat(['who']).concat(tail)), rule: 'everybody-nobody', steps };
+      }
+      // --- always -> never
+      const alwaysIdx = lower.indexOf('always');
+      if (alwaysIdx !== -1) {
+        const before = body.slice(0, alwaysIdx), after = body.slice(alwaysIdx + 1);
+        const prev = (before[before.length - 1] || '').toLowerCase();
+        const next = (after[0] || '').toLowerCase();
+        if (BE_FORMS.indexOf(prev) !== -1 && ANTONYMS[next]) {
+          steps.push(`Find **"always"** followed by the adjective **"${next}"**.`);
+          steps.push(`Replace "always" with **"never"**.`);
+          steps.push(`To keep the meaning the same, replace the adjective with its opposite: "${next}" → **"${ANTONYMS[next]}"**.`);
+          return { tokens: finish(before.concat(['never', ANTONYMS[next]]).concat(after.slice(1))), rule: 'always-never', steps };
+        }
+        const mv = recognizeVerb(after[0] || '');
+        if (mv && AUXILIARIES.indexOf(prev) === -1) {
+          const failForm = (mv.tense === 'past' || mv.tense === 'pp') ? 'failed' : (mv.tense === 'present3s' ? 'fails' : 'fail');
+          steps.push(`Find **"always"** followed by the verb **"${after[0]}"**.`);
+          steps.push(`Replace "always" with **"never"**.`);
+          steps.push(`Add **"${failForm} to"** and put the verb in its base form: "${after[0]}" → **"${mv.base}"**. ("never fails to" means "always".)`);
+          return { tokens: finish(before.concat(['never', failForm, 'to', mv.base]).concat(after.slice(1))), rule: 'always-never', steps };
+        }
+        if (MODALS.indexOf(prev) !== -1 && mv) {
+          steps.push(`Find **"always"** after the modal verb **"${before[before.length - 1]}"**.`);
+          steps.push(`Replace "always" with **"never"** and add **"fail to"** before the base verb **"${mv.base}"**.`);
+          return { tokens: finish(before.concat(['never', 'fail', 'to', mv.base]).concat(after.slice(1))), rule: 'always-never', steps };
+        }
+      }
+      // --- adjective -> antonym with "not"
+      const beIdx = body.findIndex(t => BE_FORMS.indexOf(t.toLowerCase()) !== -1);
+      if (beIdx !== -1 && /^(a|an)$/i.test(body[beIdx + 1] || '')) {
+        const adj = (body[beIdx + 2] || '').toLowerCase();
+        if (ANTONYMS[adj]) {
+          const antonym = ANTONYMS[adj];
+          steps.push(`Find the verb **"${body[beIdx]}"** and the adjective **"${adj}"** (in "${body[beIdx + 1]} ${adj}${body[beIdx + 3] ? ' ' + body[beIdx + 3] : ''}").`);
+          steps.push(`Look up the opposite (antonym) of "${adj}": **"${antonym}"**.`);
+          steps.push(`Put **not** after "${body[beIdx]}" and replace "${adj}" with "${antonym}". The double negative ("not" + an opposite word) keeps the meaning positive.`);
+          if (articleFor(antonym) !== body[beIdx + 1].toLowerCase()) steps.push(`Fix the article: "${antonym}" begins with ${articleFor(antonym) === 'an' ? 'a vowel' : 'a consonant'} sound, so **"${body[beIdx + 1]}" → "${articleFor(antonym)}"**.`);
+          const out = body.slice();
+          out[beIdx + 1] = articleFor(antonym);
+          out[beIdx + 2] = antonym;
+          out.splice(beIdx + 1, 0, 'not');
+          return { tokens: finish(out), rule: 'antonym-negative', steps };
+        }
+      }
+      // --- auxiliary + not
+      const auxIdx = findAuxiliaryIndex(body);
+      if (auxIdx !== -1) {
+        if (lower[auxIdx + 1] === 'not') return { alreadyNegative: true };
+        steps.push(`Look for an auxiliary verb (is, am, are, was, were, has, have, had, can, could, will, would, shall, should, may, might, must). Found: **"${body[auxIdx]}"**.`);
+        steps.push(`Put **not** straight after it: "${body[auxIdx]}" → **"${body[auxIdx]} not"**${lower[auxIdx] === 'can' ? ' (written as one word: "cannot")' : ''}.`);
+        const out = body.slice();
+        out.splice(auxIdx + 1, 0, 'not');
+        return { tokens: finish(out), rule: 'aux-not', steps };
+      }
+      // --- do-support
+      const mv = findMainVerbIndex(body, 1);
+      if (!mv) return { unrecognized: true, reason: `No auxiliary verb or recognizable main verb was found.` };
+      let doWord;
+      const tenseNow = simpleTenseOf(body, mv.index, mv.info);
+      if (tenseNow === 'past') doWord = ['did', 'not'];
+      else if (tenseNow === 'present3s') doWord = ['does', 'not'];
+      else doWord = ['do', 'not'];
+      steps.push(`Look for an auxiliary verb. There is none — the main verb **"${body[mv.index]}"** is in the simple ${doWord[0] === 'did' ? 'past' : 'present'} tense.`);
+      steps.push(`With no auxiliary, the negative is made with **${doWord.join(' ')}** (does → he/she/it in the present, do → I/you/we/they in the present, did → the past).`);
+      steps.push(`Change the main verb to its base form: "${body[mv.index]}" → **"${mv.info.base}"**, then put "${doWord.join(' ')}" before it.`);
+      const out = body.slice();
+      out[mv.index] = mv.info.base;
+      out.splice(mv.index, 0, ...doWord);
+      return { tokens: finish(out), rule: 'do-support', steps };
+
+    } else {
+      // ===== toAffirmative =====
+      if (lower[0] === 'none' && lower[1] === 'but') {
+        steps.push(`The sentence begins with **"None but"**.`);
+        steps.push(`Replace **"None but"** with **"Only"** — the meaning is the same.`);
+        return { tokens: finish(['Only'].concat(body.slice(2))), rule: 'none-but-only', steps };
+      }
+      // there is nobody who does not ... -> everybody ...
+      if (lower[0] === 'there' && (lower[1] === 'is' || lower[1] === 'was') && (lower[2] === 'nobody' || lower[2] === 'no')) {
+        let subj, idx;
+        if (lower[2] === 'nobody') { subj = ['Everybody']; idx = 3; }
+        else if (lower[3] === 'one') { subj = ['Everyone']; idx = 4; }
+        else { subj = ['Every', body[3]]; idx = 4; }
+        if (['who', 'that'].indexOf(lower[idx]) === -1) return { unrecognized: true, reason: `Expected "who" after "${body.slice(2, idx).join(' ')}".` };
+        const rest = body.slice(idx + 1), rl = rest.map(t => t.toLowerCase());
+        const isPast = lower[1] === 'was';
+        steps.push(`Find the double negative **"There ${lower[1]} ${body.slice(2, idx).join(' ')} who … not"**.`);
+        steps.push(`It means the same as **"${subj.join(' ')} …"** — remove "There ${lower[1]} ${body.slice(2, idx).join(' ')} who" and the negative.`);
+        steps.push(`Put the verb back in its ordinary ${isPast ? 'past' : 'present'} form after "${subj.join(' ')}".`);
+        if (/^(do|does|did)$/.test(rl[0]) && rl[1] === 'not') {
+          const info = recognizeVerb(rest[2] || '');
+          const base = info ? info.base : rest[2];
+          const verb = isPast ? conjugate(base, 'past') : conjugate(base, 's');
+          return { tokens: finish(subj.concat([verb]).concat(rest.slice(3))), rule: 'nobody-everybody', steps };
+        }
+        if (AUXILIARIES.indexOf(rl[0]) !== -1 && rl[1] === 'not') {
+          return { tokens: finish(subj.concat([rest[0]]).concat(rest.slice(2))), rule: 'nobody-everybody', steps };
+        }
+        return { unrecognized: true, reason: `After "who" expected "does/did not + verb" or "is/was not ...".` };
+      }
+      // so ... that ... cannot  -> too ... to
+      const soIdx = lower.indexOf('so');
+      const thatIdx = soIdx !== -1 ? lower.indexOf('that', soIdx + 1) : -1;
+      if (soIdx !== -1 && thatIdx !== -1) {
+        const afterThat = body.slice(thatIdx + 1);
+        let k = -1;
+        for (let i = 0; i < afterThat.length - 1; i++) if (/^(can|could)$/i.test(afterThat[i]) && /^not$/i.test(afterThat[i + 1])) { k = i; break; }
+        if (k !== -1) {
+          const auxIdx = findAuxiliaryIndex(body.slice(0, soIdx));
+          const subject = body.slice(0, auxIdx !== -1 ? auxIdx : soIdx);
+          const beWord = auxIdx !== -1 ? body[auxIdx] : 'is';
+          const adjective = body.slice(soIdx + 1, thatIdx).join(' ');
+          steps.push(`Find the pattern **"so ${adjective} that … ${afterThat[k]} not …"**.`);
+          steps.push(`Rewrite it as **"too ${adjective} to …"** — drop "that", the repeated subject, and "${afterThat[k]} not".`);
+          const out = subject.concat([beWord, 'too', adjective, 'to']).concat(afterThat.slice(k + 2));
+          return { tokens: finish(out), rule: 'so-that-too-to', steps };
+        }
+      }
+      // never ... -> always ...
+      const neverIdx = lower.indexOf('never');
+      if (neverIdx !== -1) {
+        const before = body.slice(0, neverIdx), after = body.slice(neverIdx + 1), al = after.map(t => t.toLowerCase());
+        const prev = (before[before.length - 1] || '').toLowerCase();
+        if (/^(fails|fail|failed)$/.test(al[0]) && al[1] === 'to' && after[2]) {
+          const info = recognizeVerb(after[2]);
+          const base = info ? info.base : after[2];
+          const conj = al[0] === 'failed' ? conjugate(base, 'past') : (al[0] === 'fails' ? conjugate(base, 's') : base);
+          steps.push(`Find **"never ${al[0]} to ${after[2]}"**.`);
+          steps.push(`"never ${al[0]} to" means "always": replace it with **"always"** and put the verb in the ${al[0] === 'failed' ? 'past' : 'present'} tense: "${after[2]}" → **"${conj}"**.`);
+          return { tokens: finish(before.concat(['always', conj]).concat(after.slice(3))), rule: 'never-always', steps };
+        }
+        if (BE_FORMS.indexOf(prev) !== -1 && ANTONYMS[al[0]]) {
+          steps.push(`Find **"never"** followed by the adjective **"${al[0]}"**.`);
+          steps.push(`Replace "never" with **"always"** and the adjective with its opposite: "${al[0]}" → **"${ANTONYMS[al[0]]}"**.`);
+          return { tokens: finish(before.concat(['always', ANTONYMS[al[0]]]).concat(after.slice(1))), rule: 'never-always', steps };
+        }
+        return { unrecognized: true, reason: `"never" can be reversed when it is followed by an adjective with a known antonym ("never dishonest" → "always honest") or by "fails to + verb".` };
+      }
+      // antonym reversal: "is not a dishonest boy" -> "is an honest boy"
+      const notIdx1 = lower.indexOf('not');
+      if (notIdx1 !== -1 && BE_FORMS.indexOf(lower[notIdx1 - 1]) !== -1 && /^(a|an)$/i.test(body[notIdx1 + 1] || '')) {
+        const adj = (body[notIdx1 + 2] || '').toLowerCase();
+        if (ANTONYMS[adj]) {
+          const original = ANTONYMS[adj];
+          steps.push(`Find **"not"** followed by "${body[notIdx1 + 1]} ${adj}".`);
+          steps.push(`Remove **not** and replace "${adj}" with its antonym **"${original}"**.`);
+          if (articleFor(original) !== body[notIdx1 + 1].toLowerCase()) steps.push(`Fix the article for the new word: **"${body[notIdx1 + 1]}" → "${articleFor(original)}"**.`);
+          const out = body.slice();
+          out[notIdx1 + 1] = articleFor(original);
+          out[notIdx1 + 2] = original;
+          out.splice(notIdx1, 1);
+          return { tokens: finish(out), rule: 'antonym-affirmative', steps };
+        }
+      }
+      // do/does/did not + base -> conjugated verb
+      const doIdx = body.findIndex((t, i) => /^(do|does|did)$/i.test(t) && /^not$/i.test(body[i + 1] || ''));
+      if (doIdx !== -1) {
+        const doForm = lower[doIdx];
+        const verbTok = body[doIdx + 2];
+        const info = recognizeVerb(verbTok || '');
+        const base = info ? info.base : verbTok;
+        const conjugated = doForm === 'did' ? conjugate(base, 'past') : (doForm === 'does' ? conjugate(base, 's') : base);
+        steps.push(`Find **"${doForm} not"** followed by the base verb **"${base}"**.`);
+        steps.push(`Remove "${doForm} not".`);
+        steps.push(`Put the verb back into the simple ${doForm === 'did' ? 'past' : 'present'} tense: "${base}" → **"${conjugated}"**.`);
+        return { tokens: finish(body.slice(0, doIdx).concat([conjugated]).concat(body.slice(doIdx + 3))), rule: 'remove-do-support', steps };
+      }
+      // remove "not" after any other auxiliary
+      const notIdx2 = lower.indexOf('not');
+      if (notIdx2 !== -1 && AUXILIARIES.indexOf(lower[notIdx2 - 1]) !== -1) {
+        steps.push(`Find the auxiliary verb **"${body[notIdx2 - 1]}"** followed by **not**.`);
+        steps.push(`Take out **not** to make the sentence affirmative.`);
+        const out = body.slice();
+        out.splice(notIdx2, 1);
+        return { tokens: finish(out), rule: 'remove-not', steps };
+      }
+      return { unrecognized: true, reason: `No negative marker ("not", "n't", "never", "none but" …) was found to remove.` };
+    }
+  }
+
+  /* ================= 2. Active <-> Passive Voice ================= */
+  const SUBJ_TO_OBJ = { i: 'me', he: 'him', she: 'her', we: 'us', they: 'them', you: 'you', it: 'it' };
+  const OBJ_TO_SUBJ = { me: 'I', him: 'he', her: 'she', us: 'we', them: 'they', you: 'you', it: 'it' };
+  function isPluralSubject(words) {
+    const last = (words[words.length - 1] || '').toLowerCase();
+    if (['i', 'we', 'they', 'you'].indexOf(last) !== -1) return last !== 'i';
+    return /s$/.test(last) && !/ss$/.test(last);
+  }
+  function isLiterallyI(words) { return words.length === 1 && words[0].toLowerCase() === 'i'; }
+  function beFormFor(words, tense) {
+    if (tense === 'past') return isPluralSubject(words) ? 'were' : 'was';
+    if (isLiterallyI(words)) return 'am';
+    return isPluralSubject(words) ? 'are' : 'is';
+  }
+  const COMMON_BARE_NOUNS = ['football', 'cricket', 'hockey', 'tennis', 'badminton', 'chess', 'music',
+    'honesty', 'science', 'water', 'rice', 'milk', 'tea', 'coffee', 'love', 'hatred', 'education',
+    'knowledge', 'wisdom', 'patience', 'time', 'money', 'gold', 'silver', 'iron', 'cotton', 'silk',
+    'wood', 'grass', 'sunlight', 'moonlight', 'rain', 'snow', 'wind', 'air', 'fire', 'smoke', 'dust',
+    'sand', 'salt', 'sugar', 'oil', 'health', 'wealth', 'poverty', 'crime', 'violence', 'peace', 'war',
+    'freedom', 'justice', 'truth', 'beauty', 'courage', 'hope', 'faith', 'mathematics', 'physics',
+    'chemistry', 'biology', 'history', 'geography', 'literature', 'grammar', 'english', 'bengali',
+    'news', 'information', 'technology', 'agriculture', 'business'];
+  function safeLowercaseIfCommonNoun(word) {
+    const wl = word.toLowerCase();
+    return COMMON_BARE_NOUNS.indexOf(wl) !== -1 ? wl : word;
+  }
+
+  function activeToPassive(body) {
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    const auxIdx = findAuxiliaryIndex(body);
+    let verbIdx = -1, tenseTag = '', modal = null;
+
+    if (auxIdx !== -1 && MODALS.indexOf(lower[auxIdx]) !== -1) {
+      modal = body[auxIdx]; verbIdx = auxIdx + 1; tenseTag = 'modal';
+    } else if (auxIdx !== -1 && /^(is|am|are|was|were)$/.test(lower[auxIdx]) && /ing$/.test(lower[auxIdx + 1] || '')) {
+      tenseTag = /^(is|am|are)$/.test(lower[auxIdx]) ? 'present-cont' : 'past-cont';
+      verbIdx = auxIdx + 1;
+    } else if (auxIdx !== -1 && /^(has|have|had)$/.test(lower[auxIdx])) {
+      tenseTag = lower[auxIdx] === 'had' ? 'past-perfect' : 'present-perfect';
+      verbIdx = auxIdx + 1;
+    } else {
+      const mv = findMainVerbIndex(body, 1);
+      if (!mv) return { unrecognized: true, reason: `No recognizable main verb was found.` };
+      verbIdx = mv.index;
+      tenseTag = simpleTenseOf(body, mv.index, mv.info) === 'past' ? 'simple-past' : 'simple-present';
+    }
+
+    const verbInfo = recognizeVerb(body[verbIdx]);
+    if (!verbInfo) return { unrecognized: true, reason: `Couldn't identify the main verb ("${body[verbIdx]}").` };
+    const subjEnd = auxIdx !== -1 ? auxIdx : verbIdx;
+    const subject = body.slice(0, subjEnd);
+    const object = body.slice(verbIdx + 1);
+    if (object.length === 0) return { unrecognized: true, reason: `No object was found after the verb — only sentences with a direct object (Subject + Verb + Object) can be made passive.` };
+
+    const pp = conjugate(verbInfo.base, 'pp');
+    let beVerb;
+    if (tenseTag === 'modal') beVerb = 'be';
+    else if (tenseTag === 'simple-present') beVerb = beFormFor(object, 'present');
+    else if (tenseTag === 'simple-past') beVerb = beFormFor(object, 'past');
+    else if (tenseTag === 'present-cont') beVerb = beFormFor(object, 'present') + ' being';
+    else if (tenseTag === 'past-cont') beVerb = beFormFor(object, 'past') + ' being';
+    else if (tenseTag === 'present-perfect') beVerb = (isLiterallyI(object) || !isPluralSubject(object) ? 'has' : 'have') + ' been';
+    else if (tenseTag === 'past-perfect') beVerb = 'had been';
+    else beVerb = beFormFor(object, 'present');
+
+    steps.push(`Identified subject **"${subject.join(' ')}"**, verb **"${body[verbIdx]}"**, and object **"${object.join(' ')}"**.`);
+    steps.push(`The object becomes the new subject; the verb becomes **${modal ? modal + ' ' : ''}${beVerb} + ${pp}**.`);
+
+    const newSubject = object.map((w, i) => { const wl = w.toLowerCase(); return i === 0 && OBJ_TO_SUBJ[wl] ? OBJ_TO_SUBJ[wl] : w; });
+    const byPhrase = subject.map((w, i) => {
+      const wl = w.toLowerCase();
+      if (i === subject.length - 1 && SUBJ_TO_OBJ[wl]) return SUBJ_TO_OBJ[wl];
+      if (i === 0 && wl !== 'i') return safeLowercaseIfCommonNoun(w);
+      return w;
+    });
+    steps.push(`The original subject moves to the end, introduced by **"by"**: "by ${byPhrase.join(' ')}".`);
+
+    const verbPhrase = modal ? [modal, 'be', pp] : beVerb.split(' ').concat([pp]);
+    return { tokens: newSubject.concat(verbPhrase).concat(['by']).concat(byPhrase), rule: 'active-to-passive', steps };
+  }
+
+  function passiveToActive(body) {
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    const byIdx = lower.lastIndexOf('by');
+    if (byIdx === -1) return { unrecognized: true, reason: `No "by ..." agent phrase was found — the doer of the action needs to be stated to convert back to active voice.` };
+
+    let chainStart = -1;
+    for (let i = 0; i < byIdx; i++) {
+      if (MODALS.indexOf(lower[i]) !== -1 || /^(has|have|had)$/.test(lower[i]) || BE_FORMS.indexOf(lower[i]) !== -1) { chainStart = i; break; }
+    }
+    if (chainStart === -1) return { unrecognized: true, reason: `No verb phrase (be-form / has-have-had / modal) was found before "by".` };
+
+    const subjectNounPhrase = body.slice(0, chainStart);
+    const agent = body.slice(byIdx + 1);
+
+    let cursor = chainStart, modal = null, perfectAux = null, isContinuous = false, beWordForTense = null;
+    if (MODALS.indexOf(lower[cursor]) !== -1) { modal = body[cursor]; cursor++; }
+    if (/^(has|have|had)$/.test(lower[cursor] || '')) {
+      perfectAux = lower[cursor]; cursor++;
+      if (lower[cursor] === 'been') cursor++;
+    } else if (lower[cursor] === 'be') {
+      cursor++;
+    } else if (BE_FORMS.indexOf(lower[cursor]) !== -1) {
+      beWordForTense = lower[cursor]; cursor++;
+      if (lower[cursor] === 'being') { isContinuous = true; cursor++; }
+    }
+    const ppTok = body[cursor];
+    const info = recognizeVerb(ppTok);
+    if (!info) return { unrecognized: true, reason: `Couldn't identify the past participle ("${ppTok}").` };
+    const restBetweenVerbAndBy = body.slice(cursor + 1, byIdx);
+
+    const activeSubject = agent.map((w, i) => { const wl = w.toLowerCase(); return i === 0 && OBJ_TO_SUBJ[wl] ? OBJ_TO_SUBJ[wl] : w; });
+    const activeObject = subjectNounPhrase.map((w, i) => {
+      const wl = w.toLowerCase();
+      if (i === subjectNounPhrase.length - 1 && SUBJ_TO_OBJ[wl]) return SUBJ_TO_OBJ[wl];
+      if (i === 0 && wl !== 'i') return safeLowercaseIfCommonNoun(w);
+      return w;
+    });
+
+    let verbForm;
+    if (modal) verbForm = [modal, conjugate(info.base, 'base')];
+    else if (perfectAux) {
+      const auxWord = perfectAux === 'had' ? 'had' : (isLiterallyI(activeSubject) || isPluralSubject(activeSubject) ? 'have' : 'has');
+      verbForm = [auxWord, conjugate(info.base, 'pp')];
+    } else if (beWordForTense && isContinuous) {
+      const isPast = beWordForTense === 'was' || beWordForTense === 'were';
+      verbForm = [beFormFor(activeSubject, isPast ? 'past' : 'present'), conjugate(info.base, 'ing')];
+    } else if (beWordForTense) {
+      const isPast = beWordForTense === 'was' || beWordForTense === 'were';
+      verbForm = isPast ? [conjugate(info.base, 'past')] : [isLiterallyI(activeSubject) || isPluralSubject(activeSubject) ? conjugate(info.base, 'base') : conjugate(info.base, 's')];
+    } else {
+      verbForm = [conjugate(info.base, 'base')];
+    }
+
+    steps.push(`Found passive subject **"${subjectNounPhrase.join(' ')}"**, verb phrase **"${body.slice(chainStart, cursor + 1).join(' ')}"**, and agent **"${agent.join(' ')}"** after "by".`);
+    steps.push(`The agent becomes the new subject; **${verbForm.join(' ')}** replaces the passive verb phrase; the old subject becomes the object.`);
+
+    return { tokens: activeSubject.concat(verbForm).concat(activeObject).concat(restBetweenVerbAndBy), rule: 'passive-to-active', steps };
+  }
+
+  function activePassive(tokens, toPassive) {
+    const { body, trail } = stripPunctuation(tokens);
+    const result = toPassive ? activeToPassive(body) : passiveToActive(body);
+    if (result.tokens) result.tokens = fixCapitalization(result.tokens.concat(trail));
+    return result;
+  }
+
+  /* ================= 3. Assertive <-> Interrogative ================= */
+  const CONTRACTION = { is: "isn't", am: "aren't", are: "aren't", was: "wasn't", were: "weren't",
+    has: "hasn't", have: "haven't", had: "hadn't", do: "don't", does: "doesn't", did: "didn't",
+    will: "won't", would: "wouldn't", shall: "shan't", should: "shouldn't",
+    can: "can't", could: "couldn't", may: "mayn't", might: "mightn't", must: "mustn't" };
+
+  function assertiveToInterrogative(body) {
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    const auxIdx = findAuxiliaryIndex(body);
+    const isNegative = auxIdx !== -1 && lower[auxIdx + 1] === 'not';
+    if (auxIdx === 0) return { unrecognized: true, reason: `The sentence already begins with an auxiliary verb ("${body[0]}"), so it looks like a question already. Set "From" to Interrogative to convert it to a statement.` };
+
+    if (auxIdx !== -1) {
+      const subject = body.slice(0, auxIdx);
+      const rest = body.slice(isNegative ? auxIdx + 2 : auxIdx + 1);
+      let out;
+      if (isNegative) {
+        steps.push(`Find the auxiliary verb: **"${body[auxIdx]}"**.`);
+        steps.push(`Move it in front of the subject **"${subject.join(' ')}"** — they swap places.`);
+        steps.push(`The sentence is negative, so drop **not**: the question is positive.`);
+        steps.push(`End with a question mark instead of a full stop.`);
+        out = [body[auxIdx]].concat(subject.map(lowercaseUnlessI)).concat(rest);
+      } else {
+        steps.push(`Find the auxiliary verb: **"${body[auxIdx]}"**.`);
+        steps.push(`Move it in front of the subject **"${subject.join(' ')}"** — they swap places.`);
+        steps.push(`The sentence is affirmative, so make the question negative by joining **not** to the auxiliary: **"${CONTRACTION[lower[auxIdx]] || body[auxIdx] + ' not'}"**.`);
+        steps.push(`End with a question mark instead of a full stop.`);
+        out = [CONTRACTION[lower[auxIdx]] || body[auxIdx]].concat(subject.map(lowercaseUnlessI)).concat(rest);
+      }
+      return { tokens: fixCapitalization(out).concat(['?']), rule: 'assertive-to-interrogative', steps, applied: isNegative ? [1, 3] : [0, 3] };
+    }
+    const mv = findMainVerbIndex(body, 1);
+    if (!mv) return { unrecognized: true, reason: `No recognizable main verb was found.` };
+    const subject = body.slice(0, mv.index);
+    const rest = body.slice(mv.index + 1);
+    const tenseNow = simpleTenseOf(body, mv.index, mv.info);
+    const doWord = tenseNow === 'past' ? "didn't" : (tenseNow === 'present3s' ? "doesn't" : "don't");
+    steps.push(`Look for an auxiliary verb. There is none — the main verb **"${body[mv.index]}"** is in the simple ${tenseNow === 'past' ? 'past' : 'present'} tense.`);
+    steps.push(`Begin the question with **"${doWord}"** (don't / doesn't / didn't), followed by the subject **"${subject.join(' ')}"**.`);
+    steps.push(`Change the main verb to its base form: "${body[mv.index]}" → **"${mv.info.base}"**.`);
+    steps.push(`End with a question mark.`);
+    const out = [doWord].concat(subject.map(lowercaseUnlessI)).concat([mv.info.base]).concat(rest);
+    return { tokens: fixCapitalization(out).concat(['?']), rule: 'assertive-to-interrogative-do', steps, applied: [2, 3] };
+  }
+
+  function interrogativeToAssertive(body) {
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    const first = lower[0];
+    const expansion = CONTRACTION_EXPANSION[first];
+    const isContracted = !!expansion;
+    const resolvedAux = isContracted ? expansion[0] : first;
+    if (AUXILIARIES.indexOf(resolvedAux) === -1) return { unrecognized: true, reason: `Couldn't find a recognizable auxiliary verb at the start of the question.` };
+
+    const isDoSupport = /^(do|does|did)$/.test(resolvedAux);
+    const { body: trimmed } = stripPunctuation(body.slice(1));
+    const npStart = (trimmed[0] && trimmed[0].toLowerCase() === 'not') ? 1 : 0;
+    const subjectEnd = npStart + nounPhraseExtent(trimmed.slice(npStart));
+    const subject = trimmed.slice(npStart, subjectEnd);
+    let rest = trimmed.slice(subjectEnd);
+    if (rest[0] && rest[0].toLowerCase() === 'not') rest = rest.slice(1);
+    if (!subject.length) return { unrecognized: true, reason: `Couldn't find the subject after "${body[0]}".` };
+
+    if (isContracted) {
+      steps.push(`Find the auxiliary at the front (**"${first}"**) and the subject (**"${subject.join(' ')}"**).`);
+      steps.push(`The question is negative (it contains n't), so the statement is **affirmative**: put the subject first and drop the contraction.`);
+      steps.push(`End with a full stop instead of a question mark.`);
+      if (isDoSupport) {
+        const mv = findMainVerbIndex(rest, 0);
+        if (!mv) return { unrecognized: true, reason: `Couldn't identify the main verb after the subject.` };
+        const conjugated = resolvedAux === 'did' ? conjugate(mv.info.base, 'past') : (resolvedAux === 'does' ? conjugate(mv.info.base, 's') : mv.info.base);
+        return { tokens: fixCapitalization(subject.concat(rest.slice(0, mv.index)).concat([conjugated]).concat(rest.slice(mv.index + 1))).concat(['.']), rule: 'interrogative-to-assertive-do', steps };
+      }
+      return { tokens: fixCapitalization(mergeCannot(subject.concat([resolvedAux]).concat(rest))).concat(['.']), rule: 'interrogative-to-assertive', steps };
+    }
+    steps.push(`Find the auxiliary at the front (**"${first}"**) and the subject (**"${subject.join(' ')}"**).`);
+    steps.push(`The question is positive, so the statement is **negative**: put the subject first, then the auxiliary, then **not**.`);
+    steps.push(`End with a full stop instead of a question mark.`);
+    if (isDoSupport) {
+      const mv = findMainVerbIndex(rest, 0);
+      if (!mv) return { unrecognized: true, reason: `Couldn't identify the main verb after the subject.` };
+      return { tokens: fixCapitalization(subject.concat([resolvedAux, 'not']).concat(rest.slice(0, mv.index)).concat([mv.info.base]).concat(rest.slice(mv.index + 1))).concat(['.']), rule: 'interrogative-to-assertive-do', steps };
+    }
+    return { tokens: fixCapitalization(mergeCannot(subject.concat([resolvedAux, 'not']).concat(rest))).concat(['.']), rule: 'interrogative-to-assertive', steps };
+  }
+
+  function assertiveInterrogative(tokens, toInterrogative) {
+    const { body } = stripPunctuation(tokens);
+    return toInterrogative ? assertiveToInterrogative(body) : interrogativeToAssertive(body);
+  }
+
+  /** Describe what changed between two token lists as "old → new" pairs (used in the step-by-step explanation). */
+  function diffPairs(a, b) {
+    const norm = t => t.toLowerCase();
+    const n = a.length, m = b.length;
+    const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = norm(a[i]) === norm(b[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+    const pairs = [];
+    let i = 0, j = 0, rem = [], add = [];
+    const flush = () => {
+      if (rem.length || add.length) pairs.push(rem.length && add.length ? rem.join(' ') + ' → ' + add.join(' ') : (add.length ? '+ ' + add.join(' ') : '− ' + rem.join(' ')));
+      rem = []; add = [];
+    };
+    while (i < n && j < m) {
+      if (norm(a[i]) === norm(b[j])) { flush(); i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) { rem.push(a[i]); i++; }
+      else { add.push(b[j]); j++; }
+    }
+    while (i < n) rem.push(a[i++]);
+    while (j < m) add.push(b[j++]);
+    flush();
+    return pairs;
+  }
+
+  /* ================= 4. Direct <-> Indirect Speech ================= */
+  const FEMALE_HINTS = ['she', 'mother', 'sister', 'girl', 'woman', 'queen', 'daughter', 'wife', 'aunt', 'grandmother', 'rina', 'mita', 'salma', 'ayesha', 'fatema', 'nasrin', 'shirin', 'rupa', 'mary', 'jasmine'];
+  const MODAL_BACKSHIFT = { will: 'would', can: 'could', may: 'might', must: 'had to', shall: 'should' };
+
+  function speakerPersonOf(subjectWords) {
+    const subjLower = subjectWords.map(t => t.toLowerCase());
+    if (subjLower.length === 1 && (subjLower[0] === 'i' || subjLower[0] === 'we')) return '1st';
+    if (subjLower.indexOf('they') !== -1) return '3rd-p';
+    const last = subjLower[subjLower.length - 1];
+    if (subjLower.indexOf('she') !== -1 || FEMALE_HINTS.indexOf(last) !== -1) return '3rd-f';
+    return '3rd-m';
+  }
+
+  function mapPronounsInQuote(quotedBody, speakerPerson, objectKey) {
+    const speakerMap = PRONOUN_MAP_BY_SPEAKER[speakerPerson] || PRONOUN_MAP_BY_SPEAKER['3rd-m'];
+    const youMap = objectKey ? YOU_MAP_BY_OBJECT[objectKey] : null;
+    return quotedBody.map(w => {
+      const wl = w.toLowerCase();
+      if (youMap && youMap[wl]) return youMap[wl];
+      if (speakerMap[wl]) return speakerMap[wl];
+      return w;
+    });
+  }
+
+  function applyTimePlaceShift(tokens) {
+    let text = tokens.join(' ');
+    TIME_PLACE_MAP.forEach(([re, replacement]) => { text = text.replace(re, replacement); });
+    return text.split(' ');
+  }
+
+  const SUBJECT_CLASS = { i: '1s', he: '3s', she: '3s', it: '3s', we: 'p', you: 'p', they: 'p' };
+  const AGREEMENT = {
+    '1s': { is: 'am', are: 'am', am: 'am', was: 'was', were: 'was', has: 'have', have: 'have', does: 'do', do: 'do' },
+    '3s': { am: 'is', are: 'is', is: 'is', were: 'was', was: 'was', have: 'has', has: 'has', do: 'does', does: 'does' },
+    'p': { am: 'are', is: 'are', are: 'are', was: 'were', were: 'were', has: 'have', have: 'have', does: 'do', do: 'do' }
+  };
+  function fixAgreement(tokens) {
+    const out = tokens.slice();
+    for (let i = 0; i < out.length - 1; i++) {
+      const cls = SUBJECT_CLASS[out[i].toLowerCase()];
+      if (!cls) continue;
+      const next = out[i + 1].toLowerCase();
+      if (AGREEMENT[cls][next]) { out[i + 1] = AGREEMENT[cls][next]; continue; }
+      const info = recognizeVerb(out[i + 1]);
+      if (info && (info.tense === 'base' || info.tense === 'present3s') && AUXILIARIES.indexOf(next) === -1) {
+        out[i + 1] = cls === '3s' ? conjugate(info.base, 's') : info.base;
+      }
+    }
+    return out;
+  }
+
+  function backshiftTense(body) {
+    const lower = body.map(t => t.toLowerCase());
+    const out = body.slice();
+    const modalIdx = body.findIndex((t, i) => MODAL_BACKSHIFT[lower[i]]);
+    if (modalIdx !== -1) {
+      out.splice(modalIdx, 1, ...MODAL_BACKSHIFT[lower[modalIdx]].split(' '));
+      return out;
+    }
+    const auxIdx = findAuxiliaryIndex(body);
+    if (auxIdx !== -1) {
+      const w = lower[auxIdx];
+      if (w === 'is' || w === 'am') { out[auxIdx] = 'was'; return out; }
+      if (w === 'are') { out[auxIdx] = 'were'; return out; }
+      if (w === 'has' || w === 'have') { out[auxIdx] = 'had'; return out; }
+      if (w === 'was' || w === 'were') { out.splice(auxIdx, 1, 'had', 'been'); return out; }
+      if (w === 'do' || w === 'does') { out[auxIdx] = 'did'; return out; }
+      return out;
+    }
+    const mv = findMainVerbIndex(body, 0);
+    if (mv && (mv.info.tense === 'base' || mv.info.tense === 'present3s')) out[mv.index] = conjugate(mv.info.base, 'past');
+    else if (mv && (mv.info.tense === 'past' || mv.info.tense === 'pp')) out.splice(mv.index, 1, 'had', conjugate(mv.info.base, 'pp'));
+    return out;
+  }
+
+  function parseReportingClause(tokens, openQ) {
+    const clause = tokens.slice(0, openQ).filter(t => t !== ',');
+    const lower = clause.map(t => t.toLowerCase());
+    let vIdx = -1;
+    for (let i = 0; i < clause.length; i++) {
+      if (/^(say|says|said|tell|tells|told|ask|asks|asked|order|orders|ordered|request|requests|requested|advise|advises|advised)$/.test(lower[i])) { vIdx = i; break; }
+    }
+    if (vIdx === -1) return null;
+    const subject = clause.slice(0, vIdx);
+    const verb = lower[vIdx];
+    const isPast = /^(said|told|asked|ordered|requested|advised)$/.test(verb);
+    const isSayVerb = /^(say|says|said)$/.test(verb);
+    const afterVerb = clause.slice(vIdx + 1);
+    let object = null;
+    if (isSayVerb) {
+      if (afterVerb[0] && afterVerb[0].toLowerCase() === 'to') object = afterVerb.slice(1);
+    } else if (afterVerb.length > 0) {
+      object = afterVerb;
+    }
+    if (object && object.length === 0) object = null;
+    return { subject, verb, isPast, object };
+  }
+
+  const MALE_HINTS = ['he', 'father', 'brother', 'boy', 'man', 'king', 'son', 'husband', 'uncle', 'grandfather', 'rahim', 'karim', 'hasan', 'jamal', 'kamal', 'sakib', 'jamil', 'abul', 'john', 'tom', 'ali', 'sir', 'master'];
+  function genderIsAssumed(subjectWords) {
+    const lw = subjectWords.map(t => t.toLowerCase());
+    if (lw.length === 1 && ['i', 'we', 'they', 'he', 'she'].indexOf(lw[0]) !== -1) return false;
+    const last = lw[lw.length - 1];
+    return FEMALE_HINTS.indexOf(last) === -1 && MALE_HINTS.indexOf(last) === -1;
+  }
+
+  const OBJECT_KEYS = { me: 'me', him: 'him', her: 'her', us: 'us', them: 'them' };
+  /** Which object pronoun stands for the listener? A pronoun maps to itself; a name/noun is read as him/her/them. */
+  function listenerKeyOf(objectToks) {
+    if (!objectToks || !objectToks.length) return null;
+    const last = objectToks[objectToks.length - 1].toLowerCase();
+    if (OBJECT_KEYS[last]) return OBJECT_KEYS[last];
+    const p = speakerPersonOf(objectToks);
+    return p === '3rd-f' ? 'her' : (p === '3rd-p' ? 'them' : 'him');
+  }
+
+  function subjectExtent(rest) {
+    return nounPhraseExtent(rest);
+  }
+
+  function resolveDoSupport(subject, aux, rest, reportingIsPast) {
+    const auxL = aux.toLowerCase();
+    const mv = findMainVerbIndex(rest, 0);
+    if (!mv) return null;
+    const verbBase = mv.info.base;
+    const tail = rest.slice(mv.index + 1);
+    let verbPhrase;
+    if (auxL === 'did') verbPhrase = reportingIsPast ? ['had', conjugate(verbBase, 'pp')] : [conjugate(verbBase, 'past')];
+    else verbPhrase = reportingIsPast ? [conjugate(verbBase, 'past')] : [verbBase];
+    return subject.concat(rest.slice(0, mv.index)).concat(verbPhrase).concat(tail);
+  }
+
+  function directToIndirect(tokens) {
+    const quoteIdxs = [];
+    tokens.forEach((t, i) => { if (t === '"') quoteIdxs.push(i); });
+    if (quoteIdxs.length < 2) return { unrecognized: true, reason: `No quotation marks ("...") were found — direct speech needs the quoted words in quotes.` };
+    const openQ = quoteIdxs[0], closeQ = quoteIdxs[quoteIdxs.length - 1];
+
+    const rc = parseReportingClause(tokens, openQ);
+    if (!rc) return { unrecognized: true, reason: `No reporting verb (say/said/tell/told/ask/asked...) was found before the quotation.` };
+
+    const { body: quotedBody, trail: quotedTrail } = stripPunctuation(tokens.slice(openQ + 1, closeQ));
+    const endPunct = quotedTrail[quotedTrail.length - 1] || '.';
+    const steps = [];
+
+    const speaker = speakerPersonOf(rc.subject);
+    const objKey = listenerKeyOf(rc.object);
+    const listener = rc.object ? rc.object : [];
+    const list = arr => arr.map(x => `**${x}**`).join(', ');
+
+    steps.push(`Find the reporting clause and the spoken words: the reporting verb is **"${rc.verb}"** (${rc.isPast ? 'past tense' : 'present tense'}), the speaker is **"${rc.subject.join(' ')}"**${rc.object ? ` and the listener is **"${rc.object.join(' ')}"**` : ''}. The spoken words are the part inside the quotation marks.`);
+
+    const qLower = quotedBody.map(t => t.toLowerCase());
+    const WH_WORDS = ['what', 'who', 'whom', 'whose', 'which', 'when', 'where', 'why', 'how'];
+    let sentenceType = 'statement';
+    if (endPunct === '?' && AUXILIARIES.indexOf(qLower[0]) !== -1) sentenceType = 'yesno';
+    else if (endPunct === '?' && WH_WORDS.indexOf(qLower[0]) !== -1) sentenceType = 'wh';
+    else if (qLower[0] === 'please' || qLower[0] === 'kindly') sentenceType = 'request';
+    else if (AUXILIARIES.indexOf(qLower[0]) === -1 && recognizeVerb(quotedBody[0]) && recognizeVerb(quotedBody[0]).tense === 'base') sentenceType = 'command';
+
+    const changes = { pron: [], agree: [], tense: [], time: [] };
+    function finish(b) {
+      const m1 = mapPronounsInQuote(b, speaker, objKey);
+      changes.pron = changes.pron.concat(diffPairs(b, m1));
+      const m2 = fixAgreement(m1);
+      if (!rc.isPast) { changes.agree = changes.agree.concat(diffPairs(m1, m2)); return m2; }
+      const m3 = backshiftTense(m2);
+      const m4 = fixAgreement(m3);
+      changes.tense = changes.tense.concat(diffPairs(m1, m4)); // compare with the student's own words (am → was, not is → was)
+      const m5 = applyTimePlaceShift(m4);
+      changes.time = changes.time.concat(diffPairs(m4, m5));
+      return m5;
+    }
+    function explain(withTense) {
+      if (changes.pron.length) steps.push(`Change the **pronouns** to fit who is speaking and who is listening: ${list(changes.pron)}.`);
+      if (withTense) {
+        if (rc.isPast) steps.push(changes.tense.length ? `The reporting verb is past, so move the **tense one step back**: ${list(changes.tense)}.` : `The reporting verb is past, so the tense normally moves one step back — nothing needed changing in this sentence.`);
+        else steps.push(`The reporting verb is in the present tense, so the **tense does not change**${changes.agree.length ? ` (only the verb agreement adjusts: ${list(changes.agree)})` : ''}.`);
+      }
+      if (changes.time.length) steps.push(`Change the **time and place words**: ${list(changes.time)}.`);
+    }
+    function appliedFor(base) {
+      const a = base.slice();
+      if (changes.pron.length) a.push(1);
+      if (rc.isPast && changes.tense.length) a.push(2);
+      if (changes.time.length) a.push(3);
+      return a.filter((v, i, arr) => arr.indexOf(v) === i).sort((x, y) => x - y);
+    }
+
+    if (sentenceType === 'statement') {
+      const verbWord = rc.object ? (rc.isPast ? 'told' : 'tells') : (rc.isPast ? 'said' : 'says');
+      const body2 = finish(quotedBody);
+      const sayToTell = rc.object && /^(say|says|said)$/.test(rc.verb);
+      steps.push(`Remove the quotation marks and join the spoken words to the reporting clause with **"that"**${sayToTell ? `. Because a listener ("${rc.object.join(' ')}") is named, "${rc.verb} to" becomes **"${verbWord}"**` : ''}.`);
+      explain(true);
+      const out = rc.subject.concat([verbWord]).concat(listener).concat(['that']).concat(body2);
+      return { tokens: fixCapitalization(out).concat(['.']), rule: 'direct-to-indirect-statement', steps, applied: appliedFor(sayToTell ? [0, 6] : [0]) };
+    }
+
+    if (sentenceType === 'yesno' || sentenceType === 'wh') {
+      let whWord = null, qb = quotedBody;
+      if (sentenceType === 'wh') { whWord = quotedBody[0].toLowerCase(); qb = quotedBody.slice(1); }
+      let body;
+      if (qb.length && AUXILIARIES.indexOf(qb[0].toLowerCase()) !== -1) {
+        const aux = qb[0];
+        const afterAux = qb.slice(1);
+        const n = subjectExtent(afterAux);
+        const subject = afterAux.slice(0, n);
+        const rest = afterAux.slice(n);
+        if (/^(do|does|did)$/i.test(aux)) {
+          const mappedSubj = mapPronounsInQuote(subject, speaker, objKey);
+          changes.pron = changes.pron.concat(diffPairs(subject, mappedSubj));
+          const resolved = resolveDoSupport(mappedSubj, aux, rest, rc.isPast);
+          if (!resolved) return { unrecognized: true, reason: `Couldn't identify the main verb in the question.` };
+          const before = mappedSubj.concat([aux.toLowerCase()]).concat(rest);
+          body = fixAgreement(resolved);
+          if (rc.isPast) changes.tense = changes.tense.concat(diffPairs(before, body)); else changes.agree = changes.agree.concat(diffPairs(before, body));
+          if (rc.isPast) { const t2 = applyTimePlaceShift(body); changes.time = changes.time.concat(diffPairs(body, t2)); body = t2; }
+        } else {
+          body = finish(subject.concat([aux]).concat(rest));
+        }
+      } else {
+        body = finish(qb);
+      }
+      const verbWord = rc.isPast ? 'asked' : 'asks';
+      const connector = sentenceType === 'yesno' ? ['if'] : [whWord];
+      steps.push(sentenceType === 'yesno'
+        ? `Remove the question order and the question mark: put the words back in **statement order** (subject before the verb, no do/does/did) and join them to the reporting verb with **"if"**.`
+        : `Keep the question word **"${whWord}"**, put the rest back in **statement order** (subject before the verb, no do/does/did), and join it directly to the reporting verb.`);
+      explain(true);
+      const out = rc.subject.concat([verbWord]).concat(listener).concat(connector).concat(body);
+      return { tokens: fixCapitalization(out).concat(['.']), rule: 'direct-to-indirect-' + sentenceType, steps, applied: appliedFor([0, 4]) };
+    }
+
+    const cmdBody = sentenceType === 'request' ? quotedBody.slice(1) : quotedBody;
+    if (!findMainVerbIndex(cmdBody, 0)) return { unrecognized: true, reason: `Couldn't identify the base-form verb in the command.` };
+    const mapped1 = mapPronounsInQuote(cmdBody, speaker, objKey);
+    changes.pron = diffPairs(cmdBody, mapped1);
+    let mapped = mapped1;
+    if (rc.isPast) { mapped = applyTimePlaceShift(mapped1); changes.time = diffPairs(mapped1, mapped); }
+    mapped = mapped.map((w, i) => (i === 0 ? w.toLowerCase() : w));
+    const verbWord = sentenceType === 'request' ? (rc.isPast ? 'requested' : 'requests') : (rc.isPast ? 'told' : 'tells');
+    const finalObject = rc.object || ['him'];
+    steps.push(`A ${sentenceType === 'request' ? 'polite request' : 'command'} becomes **"to + base verb"**: use the reporting verb **"${verbWord}"**${sentenceType === 'request' ? ' (the word "Please" is dropped)' : ''}, then the listener **"${finalObject.join(' ')}"**, then "to" and the verb.${rc.object ? '' : ' No listener was named, so "him" is used.'}`);
+    explain(false);
+    const out = rc.subject.concat([verbWord]).concat(finalObject).concat(['to']).concat(mapped);
+    return { tokens: fixCapitalization(out).concat(['.']), rule: 'direct-to-indirect-command', steps, applied: appliedFor([5]) };
+  }
+
+  function directIndirect(tokens, toIndirect) {
+    const r = toIndirect ? directToIndirect(tokens) : indirectToDirect(tokens);
+    if (r && r.tokens) {
+      const qIdx = tokens.indexOf('"');
+      const subjEnd = toIndirect ? (qIdx === -1 ? tokens.length : qIdx) : tokens.length;
+      const rc0 = toIndirect ? parseReportingClause(tokens, subjEnd) : null;
+      let subj = rc0 ? rc0.subject : null;
+      if (!toIndirect) {
+        const lw = tokens.map(t => t.toLowerCase());
+        const vi = lw.findIndex(t => /^(say|says|said|tell|tells|told|ask|asks|asked|order|orders|ordered|request|requests|requested|advise|advises|advised)$/.test(t));
+        if (vi > 0) subj = tokens.slice(0, vi);
+      }
+      r.notes = r.notes || [];
+      if (subj && subj.length && genderIsAssumed(subj)) {
+        r.notes.push(`The speaker "${subj.join(' ')}" isn't clearly masculine or feminine, so **he / his / him** was assumed. Change it to she / her if needed.`);
+      }
+      // a named (non-pronoun) listener
+      let listenerWords = null;
+      if (toIndirect) { const rcL = parseReportingClause(tokens, tokens.indexOf('"') === -1 ? tokens.length : tokens.indexOf('"')); listenerWords = rcL && rcL.object; }
+      else {
+        const lw = tokens.map(t => t.toLowerCase());
+        const vi = lw.findIndex(t => /^(tell|tells|told|ask|asks|asked|order|orders|ordered|request|requests|requested|advise|advises|advised)$/.test(t));
+        if (vi > 0) { let ci = lw.findIndex((t, i) => i > vi && (t === 'that' || t === 'if' || t === 'whether' || t === 'to' || (t === 'not' && lw[i + 1] === 'to') || ['what','who','whom','whose','which','when','where','why','how'].indexOf(t) !== -1)); if (ci === -1) ci = tokens.length; listenerWords = tokens.slice(vi + 1, ci); }
+      }
+      if (listenerWords && listenerWords.length && !OBJECT_KEYS[listenerWords[listenerWords.length - 1].toLowerCase()] && genderIsAssumed(listenerWords)) {
+        r.notes.push(`The listener "${listenerWords.join(' ')}" isn't clearly masculine or feminine, so **he / him / his** was assumed. Change it to she / her if needed.`);
+      }
+    }
+    return r;
+  }
+
+  /* ================= 5. Assertive <-> Exclamatory ================= */
+  const INTENSIFIERS = ['very', 'so', 'really'];
+  const DETERMINERS = ['the', 'a', 'an', 'my', 'your', 'his', 'her', 'its', 'our', 'their', 'this', 'that', 'these', 'those'];
+
+  function assertiveToExclamatory(body) {
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    const beIdx = body.findIndex(t => /^(is|are|was|were|am)$/i.test(t));
+    if (beIdx < 1) return { unrecognized: true, reason: `No "subject + is/are/was/were/am" was found — exclamatory conversion works on sentences like "It is a very beautiful flower." or "He is very clever."` };
+    const subject = body.slice(0, beIdx);
+    const be = lower[beIdx];
+    const after = body.slice(beIdx + 1), al = after.map(t => t.toLowerCase());
+
+    let nounPhrase = null;
+    if ((al[0] === 'a' || al[0] === 'an') && INTENSIFIERS.indexOf(al[1]) !== -1 && after.length >= 4) nounPhrase = after.slice(2);
+    else if (al[0] === 'such' && (al[1] === 'a' || al[1] === 'an') && after.length >= 4) nounPhrase = after.slice(2);
+    if (nounPhrase) {
+      steps.push(`The sentence has the pattern **"${subject.join(' ')} ${be} a very [adjective] [noun]"**.`);
+      steps.push(`Drop "very", start with **What a/an**, keep "[adjective] [noun]", then put the subject and verb at the end: "What ${articleFor(nounPhrase[0])} ${nounPhrase.join(' ')} ${subject.join(' ').toLowerCase()} ${be}!"`);
+      const out = ['What', articleFor(nounPhrase[0])].concat(nounPhrase).concat(subject).concat([be]);
+      return { tokens: fixCapitalization(out).concat(['!']), rule: 'assertive-to-exclamatory-what', steps, applied: articleFor(nounPhrase[0]) === 'an' ? [0, 2, 3] : [0, 3] };
+    }
+    if (INTENSIFIERS.indexOf(al[0]) !== -1 && after.length >= 2) {
+      const adj = after[1], rest = after.slice(2);
+      steps.push(`The sentence has the pattern **"${subject.join(' ')} ${be} very [adjective]"**.`);
+      steps.push(`Drop "very", start with **How** + the adjective "${adj}", then put the subject and verb after it: "How ${adj} ${subject.join(' ').toLowerCase()} ${be}${rest.length ? ' ' + rest.join(' ') : ''}!"`);
+      const out = ['How', adj].concat(subject).concat([be]).concat(rest);
+      return { tokens: fixCapitalization(out).concat(['!']), rule: 'assertive-to-exclamatory-how', steps };
+    }
+    return { unrecognized: true, reason: `Expected "… is a very [adjective] [noun]" or "… is very [adjective]".` };
+  }
+
+  function exclamatoryToAssertive(body) {
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    if (lower[0] !== 'what' && lower[0] !== 'how') return { unrecognized: true, reason: `Exclamatory sentences in this pattern begin with "What" or "How".` };
+    const be = body[body.length - 1];
+    if (!/^(is|are|was|were|am)$/i.test(be)) return { unrecognized: true, reason: `The sentence should end with a form of "be", like "What a beautiful flower it is!"` };
+    const inner = body.slice(1, body.length - 1);
+    if (inner.length < 2) return { unrecognized: true, reason: `Not enough words between "${body[0]}" and "${be}".` };
+    let subjStart;
+    const lastTok = inner[inner.length - 1].toLowerCase();
+    if (SUBJECT_CLASS[lastTok] !== undefined) subjStart = inner.length - 1;
+    else {
+      subjStart = -1;
+      for (let i = inner.length - 1; i >= 1; i--) if (DETERMINERS.indexOf(inner[i].toLowerCase()) !== -1) { subjStart = i; break; }
+      if (subjStart === -1) subjStart = inner.length - 1;
+    }
+    const subject = inner.slice(subjStart), middle = inner.slice(0, subjStart);
+    if (!middle.length) return { unrecognized: true, reason: `Couldn't find the adjective/noun part of the exclamation.` };
+    if (lower[0] === 'what') {
+      if (!/^(a|an)$/i.test(middle[0])) return { unrecognized: true, reason: `After "What" expected "a/an + adjective + noun".` };
+      steps.push(`Pattern **"What a/an [adjective] [noun] ${subject.join(' ').toLowerCase()} ${be.toLowerCase()}!"** — move the subject and verb back to the front.`);
+      const tail = middle.length >= 3 ? ['a', 'very'].concat(middle.slice(1)) : ['such'].concat(middle);
+      steps.push(`Rebuild as a statement: "${subject.join(' ')} ${be.toLowerCase()} ${tail.join(' ')}."`);
+      return { tokens: fixCapitalization(subject.concat([be.toLowerCase()]).concat(tail)).concat(['.']), rule: 'exclamatory-to-assertive-what', steps };
+    }
+    steps.push(`Pattern **"How [adjective] ${subject.join(' ').toLowerCase()} ${be.toLowerCase()}!"** — move the subject and verb back to the front and add "very" before the adjective.`);
+    return { tokens: fixCapitalization(subject.concat([be.toLowerCase(), 'very']).concat(middle)).concat(['.']), rule: 'exclamatory-to-assertive-how', steps };
+  }
+
+  /* ================= 6. Assertive <-> Imperative ================= */
+  function assertiveToImperative(rawBody) {
+    const body = expandContractions(rawBody);
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    const polite = /^(request|beg|implore|ask)$/;
+    const direct = /^(advise|order|command|tell|urge)$/;
+    if (lower[0] === 'i' && (polite.test(lower[1]) || direct.test(lower[1])) && lower[2] === 'you' && lower[3] === 'to') {
+      const isPolite = polite.test(lower[1]);
+      steps.push(`"I ${lower[1]} you to + verb" is a ${isPolite ? 'polite request' : 'command'} in assertive form.`);
+      steps.push(isPolite ? `Drop "I ${lower[1]} you to" and begin with **Please** + the base verb.` : `Drop "I ${lower[1]} you to" and begin directly with the base verb — the subject "you" is understood.`);
+      const out = isPolite ? ['please'].concat(body.slice(4)) : body.slice(4);
+      return { tokens: fixCapitalization(out).concat(['.']), rule: 'assertive-to-imperative-request', steps };
+    }
+    if (lower[0] === 'you' && lower[1] === 'are' && lower[2] === 'requested' && lower[3] === 'to') {
+      steps.push(`"You are requested to + verb" is a polite request — rewrite it with **Please** + the base verb.`);
+      return { tokens: fixCapitalization(['please'].concat(body.slice(4))).concat(['.']), rule: 'assertive-to-imperative-request', steps };
+    }
+    if ((lower[0] === 'you' || lower[0] === 'we') && /^(should|must|ought|need)$/.test(lower[1]) || (lower[0] === 'you' && lower[1] === 'have' && lower[2] === 'to')) {
+      const isWe = lower[0] === 'we';
+      let i = lower[1] === 'have' ? 3 : 2;
+      if (lower[1] === 'ought' && lower[2] === 'to') i = 3;
+      if (isWe) {
+        steps.push(`"We should/must + verb" is a suggestion to a group — rewrite it as **Let us + base verb**.`);
+        return { tokens: fixCapitalization(['let', 'us'].concat(body.slice(i))).concat(['.']), rule: 'assertive-to-imperative-let', steps };
+      }
+      if (lower[i] === 'not') {
+        steps.push(`"You should/must **not** + verb" is a prohibition — drop "You should/must" and begin with **Do not** + the base verb.`);
+        return { tokens: fixCapitalization(['do', 'not'].concat(body.slice(i + 1))).concat(['.']), rule: 'assertive-to-imperative-negative', steps };
+      }
+      if (lower[i] === 'never') {
+        steps.push(`"You should/must **never** + verb" becomes **Never** + the base verb.`);
+        return { tokens: fixCapitalization(['never'].concat(body.slice(i + 1))).concat(['.']), rule: 'assertive-to-imperative-negative', steps };
+      }
+      steps.push(`"You should/must + verb" expresses advice or duty — drop "You should/must"; an imperative sentence starts directly with the base verb because the subject "you" is understood.`);
+      return { tokens: fixCapitalization(body.slice(i)).concat(['.']), rule: 'assertive-to-imperative-plain', steps };
+    }
+    return { unrecognized: true, reason: `Expected a pattern like "You should/must + verb", "You must not + verb", "I request you to + verb", or "You are requested to + verb".` };
+  }
+
+  function imperativeToAssertive(rawBody) {
+    const body = expandContractions(rawBody).filter((t, i) => !(t === ',' && i === 1));
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    if (lower[0] === 'please') {
+      steps.push(`A sentence starting with **Please** is a polite request — rewrite it as **"I request you to + base verb"**.`);
+      return { tokens: fixCapitalization(['i', 'request', 'you', 'to'].concat(body.slice(1))).concat(['.']), rule: 'imperative-to-assertive-request', steps };
+    }
+    if (lower[0] === 'do' && lower[1] === 'not') {
+      steps.push(`**Do not + verb** is a prohibition — rewrite it as **"You must not + base verb"** (the understood subject "you" is now stated).`);
+      return { tokens: fixCapitalization(['you', 'must', 'not'].concat(body.slice(2))).concat(['.']), rule: 'imperative-to-assertive-negative', steps };
+    }
+    if (lower[0] === 'never') {
+      steps.push(`**Never + verb** is a strong prohibition — rewrite it as **"You must never + base verb"**.`);
+      return { tokens: fixCapitalization(['you', 'must', 'never'].concat(body.slice(1))).concat(['.']), rule: 'imperative-to-assertive-negative', steps };
+    }
+    if (lower[0] === "let's" || (lower[0] === 'let' && lower[1] === 'us')) {
+      steps.push(`**Let us + verb** is a suggestion to a group — rewrite it as **"We should + base verb"**.`);
+      return { tokens: fixCapitalization(['we', 'should'].concat(body.slice(lower[0] === "let's" ? 1 : 2))).concat(['.']), rule: 'imperative-to-assertive-let', steps };
+    }
+    const info = recognizeVerb(body[0] || '');
+    if (info && info.tense === 'base') {
+      steps.push(`An imperative sentence starts with a base verb and has an understood subject "you" — state it: **"You should + base verb"** (use "must" for a stronger obligation).`);
+      return { tokens: fixCapitalization(['you', 'should', body[0].toLowerCase()].concat(body.slice(1))).concat(['.']), rule: 'imperative-to-assertive-plain', steps };
+    }
+    return { unrecognized: true, reason: `An imperative sentence should begin with a base verb, "Please", "Do not", "Never", or "Let us".` };
+  }
+
+  /* ================= 7. Assertive <-> Optative ================= */
+  function assertiveToOptative(body) {
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    if (lower[0] !== 'i' || !/^(wish|pray|hope|desire|want)$/.test(lower[1] || '')) {
+      return { unrecognized: true, reason: `Expected a sentence like "I pray that you may live long." or "I wish you a happy new year."` };
+    }
+    let i = 2;
+    if (lower[i] === 'to') { i++; if (lower[i] === 'the') i++; i++; }
+    if (lower[i] === 'that') i++;
+    let mIdx = -1;
+    for (let k = i; k < body.length; k++) if (/^(may|might|will|shall)$/.test(lower[k])) { mIdx = k; break; }
+    if (mIdx > i) {
+      const subject = body.slice(i, mIdx), rest = body.slice(mIdx + 1);
+      steps.push(`"I ${lower[1]} that [subject] may + verb" expresses a wish — drop "I ${lower[1]} that" and the modal, and begin with **May** + subject + base verb.`);
+      steps.push(`Subject: **"${subject.join(' ')}"**, verb phrase: **"${rest.join(' ')}"** → "May ${subject.join(' ')} ${rest.join(' ')}!"`);
+      return { tokens: fixCapitalization(['may'].concat(subject).concat(rest)).concat(['!']), rule: 'assertive-to-optative', steps };
+    }
+    if (lower[1] === 'wish' && lower[2] === 'you' && body.length > 3) {
+      steps.push(`"I wish you + noun phrase" becomes **May you have + noun phrase** — an optative sentence beginning with "May".`);
+      return { tokens: fixCapitalization(['may', 'you', 'have'].concat(body.slice(3))).concat(['!']), rule: 'assertive-to-optative-wish', steps };
+    }
+    return { unrecognized: true, reason: `Couldn't find "may/might/will/shall" after the wish ("I pray that you may live long.").` };
+  }
+
+  function optativeToAssertive(body) {
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    if (lower[0] !== 'may') return { unrecognized: true, reason: `Optative sentences begin with "May" (e.g. "May you live long!").` };
+    const rest = body.slice(1);
+    if (!rest.length) return { unrecognized: true, reason: `Nothing follows "May".` };
+    if (rest[0].toLowerCase() === 'you' && (rest[1] || '').toLowerCase() === 'have' && rest.length > 2) {
+      steps.push(`"May you have + noun phrase" reverses to **"I wish you + noun phrase"**.`);
+      return { tokens: fixCapitalization(['i', 'wish', 'you'].concat(rest.slice(2))).concat(['.']), rule: 'optative-to-assertive-wish', steps };
+    }
+    let subjEnd = 1;
+    if (!SUBJECT_CLASS[rest[0].toLowerCase()]) {
+      for (let k = 1; k < rest.length; k++) { const info = recognizeVerb(rest[k]); if (info && info.tense === 'base') { subjEnd = k; break; } }
+    }
+    const subject = rest.slice(0, subjEnd), verbPhrase = rest.slice(subjEnd);
+    steps.push(`Remove **May** and rewrite the wish as **"I pray that + subject + may + base verb"**.`);
+    steps.push(`Subject: **"${subject.join(' ')}"**, verb phrase: **"${verbPhrase.join(' ')}"**.`);
+    return { tokens: fixCapitalization(['i', 'pray', 'that'].concat(subject).concat(['may']).concat(verbPhrase)).concat(['.']), rule: 'optative-to-assertive', steps };
+  }
+
+  /* ================= 8. Simple / Complex / Compound ================= */
+  function splitAtFirstComma(tokens) {
+    const idx = tokens.indexOf(',');
+    return idx === -1 ? null : { head: tokens.slice(0, idx), tail: tokens.slice(idx + 1) };
+  }
+  function mainSubjectOf(main) {
+    if (!main.length) return [];
+    if (SUBJECT_CLASS[main[0].toLowerCase()]) return [main[0]];
+    const aux = findAuxiliaryIndex(main);
+    const mv = findMainVerbIndex(main, 1);
+    let end = main.length;
+    if (aux > 0) end = Math.min(end, aux);
+    if (mv) end = Math.min(end, mv.index);
+    return main.slice(0, Math.max(1, end));
+  }
+  function mainTense(main) {
+    if (main.some(t => /^(was|were|had|did|could|would|might)$/i.test(t))) return 'past';
+    const mv = findMainVerbIndex(main, 1);
+    return mv && (mv.info.tense === 'past' || mv.info.tense === 'pp') ? 'past' : 'present';
+  }
+  const sameWords = (a, b) => a.map(t => t.toLowerCase()).join(' ') === b.map(t => t.toLowerCase()).join(' ');
+
+  function parseStructure(body) {
+    const lower = body.map(t => t.toLowerCase());
+    // ---------- simple ----------
+    const sp = splitAtFirstComma(body);
+    if (sp) {
+      const hl = sp.head.map(t => t.toLowerCase());
+      if (hl[0] === 'being') return { relation: 'cause', form: 'simple', subj: null, complement: sp.head.slice(1), main: sp.tail };
+      if (hl[0] === 'in' && hl[1] === 'spite' && hl[2] === 'of' && hl[3] === 'being') return { relation: 'concession', form: 'simple', subj: null, complement: sp.head.slice(4), main: sp.tail };
+      if (hl[0] === 'despite' && hl[1] === 'being') return { relation: 'concession', form: 'simple', subj: null, complement: sp.head.slice(2), main: sp.tail };
+      if ((hl[0] === 'on' || hl[0] === 'upon') && recognizeVerb(sp.head[1] || '') && recognizeVerb(sp.head[1]).tense === 'ing') {
+        return { relation: 'time', form: 'simple', subj: null, verbBase: recognizeVerb(sp.head[1]).base, rest: sp.head.slice(2), main: sp.tail };
+      }
+      // ---------- complex, subordinate clause first ----------
+      let connLen = 0, relation = null;
+      if (hl[0] === 'as' && hl[1] === 'soon' && hl[2] === 'as') { connLen = 3; relation = 'time'; }
+      else if (hl[0] === 'even' && hl[1] === 'though') { connLen = 2; relation = 'concession'; }
+      else if (hl[0] === 'although' || hl[0] === 'though') { connLen = 1; relation = 'concession'; }
+      else if (hl[0] === 'because' || hl[0] === 'since' || hl[0] === 'as') { connLen = 1; relation = 'cause'; }
+      else if (hl[0] === 'when') { connLen = 1; relation = 'time'; }
+      if (relation) {
+        const clause = sp.head.slice(connLen);
+        const parsed = parseSubClause(clause, relation);
+        if (parsed) return Object.assign({ relation, form: 'complex', main: sp.tail }, parsed);
+      }
+    }
+    // ---------- complex, subordinate clause last ("He stayed home because he was ill.") ----------
+    for (let k = 1; k < lower.length; k++) {
+      if (lower[k] === 'because' || lower[k] === 'although' || lower[k] === 'though') {
+        const relation = lower[k] === 'because' ? 'cause' : 'concession';
+        let mainEnd = k; if (body[mainEnd - 1] === ',') mainEnd--;
+        const parsed = parseSubClause(body.slice(k + 1), relation);
+        if (parsed) return Object.assign({ relation, form: 'complex', main: body.slice(0, mainEnd) }, parsed);
+      }
+    }
+    // ---------- compound ----------
+    for (let k = 1; k < lower.length; k++) {
+      const prev = lower[k - 1];
+      if (lower[k] === 'so' && (prev === ',' || prev === 'and')) {
+        const left = body.slice(0, k - (prev === 'and' && body[k - 2] === ',' ? 2 : 1)).filter((t, i, a) => !(i === a.length - 1 && t === ','));
+        const parsed = parseSubClause(left, 'cause');
+        if (parsed && body.slice(k + 1).length) return Object.assign({ relation: 'cause', form: 'compound', main: body.slice(k + 1) }, parsed);
+      }
+      if ((lower[k] === 'but' || lower[k] === 'yet')) {
+        const left = body.slice(0, k).filter((t, i, a) => !(i === a.length - 1 && t === ','));
+        const parsed = parseSubClause(left, 'concession');
+        if (parsed && body.slice(k + 1).length) return Object.assign({ relation: 'concession', form: 'compound', main: body.slice(k + 1) }, parsed);
+      }
+      if (lower[k] === 'and' && SUBJECT_CLASS[lower[k + 1]] !== undefined) {
+        const left = body.slice(0, k).filter((t, i, a) => !(i === a.length - 1 && t === ','));
+        const parsed = parseSubClause(left, 'time');
+        if (parsed) return Object.assign({ relation: 'time', form: 'compound', main: body.slice(k + 1) }, parsed);
+      }
+    }
+    return null;
+  }
+
+  /** Parse "SUBJ be COMPLEMENT" (cause/concession) or "SUBJ V-past REST" (time). */
+  function parseSubClause(clause, relation) {
+    if (relation === 'time') {
+      for (let i = 1; i < clause.length; i++) {
+        const info = recognizeVerb(clause[i]);
+        if (info && (info.tense === 'past' || info.tense === 'pp')) return { subj: clause.slice(0, i), verbBase: info.base, rest: clause.slice(i + 1) };
+      }
+      return null;
+    }
+    const beIdx = clause.findIndex(t => /^(is|are|was|were|am)$/i.test(t));
+    if (beIdx < 1 || beIdx === clause.length - 1) return null;
+    return { subj: clause.slice(0, beIdx), complement: clause.slice(beIdx + 1) };
+  }
+
+  function renderStructure(R, to) {
+    const subj = R.subj || mainSubjectOf(R.main);
+    const tense = mainTense(R.main);
+    if (R.relation === 'time') {
+      const past = conjugate(R.verbBase, 'past');
+      if (to === 'simple') return ['On', conjugate(R.verbBase, 'ing')].concat(R.rest, [','], R.main);
+      if (to === 'complex') return ['When'].concat(subj, [past], R.rest, [','], R.main);
+      return subj.concat([past], R.rest, ['and'], R.main);
+    }
+    const be = beFormFor(subj, tense);
+    const cause = R.relation === 'cause';
+    if (to === 'simple') return (cause ? ['Being'] : ['In', 'spite', 'of', 'being']).concat(R.complement, [','], R.main);
+    if (to === 'complex') return [cause ? 'As' : 'Although'].concat(subj, [be], R.complement, [','], R.main);
+    return subj.concat([be], R.complement, [',', cause ? 'so' : 'but'], R.main);
+  }
+
+  function structureConvert(tokens, from, to) {
+    const { body } = stripPunctuation(tokens);
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    const label = { simple: 'simple', complex: 'complex', compound: 'compound' };
+
+    // ----- degree: too/enough <-> so ... that -----
+    const tooIdx = lower.indexOf('too');
+    const enoughIdx = lower.indexOf('enough');
+    const soIdx = lower.indexOf('so');
+    const thatIdx = soIdx !== -1 ? lower.indexOf('that', soIdx + 1) : -1;
+    const isTooTo = tooIdx !== -1 && lower.indexOf('to', tooIdx + 1) > tooIdx + 1;
+    const isEnoughTo = enoughIdx > 0 && lower[enoughIdx + 1] === 'to';
+    const isSoThat = soIdx !== -1 && thatIdx !== -1;
+    if (isTooTo || isEnoughTo || isSoThat) {
+      if (to === 'compound' || from === 'compound') return { unrecognized: true, reason: `"too…to", "…enough to" and "so…that" sentences convert between simple and complex only.` };
+      if (isTooTo && to === 'complex') {
+        const r = affirmativeNegative(tokens, true);
+        if (r.tokens && r.rule === 'too-to-so-that') {
+          return { tokens: r.tokens, rule: 'structure-degree', detected: 'simple', steps: [`The sentence is **simple**: "too … to …" packs a result into a single clause.`, `Turn it into a **complex** sentence with a "that"-clause: "too ADJ to VERB" → "so ADJ that [subject] cannot VERB".`, ...r.steps.slice(0, 1)] };
+        }
+      }
+      if (isSoThat && to === 'simple') {
+        const afterThat = body.slice(thatIdx + 1);
+        const negIdx = afterThat.findIndex((t, i) => /^(can|could|cannot|couldn't|can't)$/i.test(t));
+        if (negIdx !== -1) {
+          const r = affirmativeNegative(tokens, false);
+          if (r.tokens && r.rule === 'so-that-too-to') {
+            return { tokens: r.tokens, rule: 'structure-degree', detected: 'complex', steps: [`The sentence is **complex**: it has a main clause and a "that"-clause of result.`, `Collapse the "that"-clause into a phrase: "so ADJ that [subject] cannot VERB" → "too ADJ to VERB".`, ...r.steps.slice(0, 1)] };
+          }
+        }
+        const k = afterThat.findIndex(t => /^(can|could)$/i.test(t));
+        if (k !== -1) {
+          const auxIdx = findAuxiliaryIndex(body.slice(0, soIdx));
+          const subject = body.slice(0, auxIdx !== -1 ? auxIdx : soIdx);
+          const be = auxIdx !== -1 ? body[auxIdx] : 'is';
+          const adjective = body.slice(soIdx + 1, thatIdx);
+          const out = subject.concat([be]).concat(adjective).concat(['enough', 'to']).concat(afterThat.slice(k + 1));
+          return { tokens: fixCapitalization(out).concat(['.']), rule: 'structure-degree', detected: 'complex', steps: [`The sentence is **complex**: it has a main clause and a "that"-clause of result.`, `Collapse the "that"-clause into a phrase: "so ADJ that [subject] can VERB" → "ADJ enough to VERB".`] };
+        }
+      }
+      if (isEnoughTo && to === 'complex') {
+        const auxIdx = findAuxiliaryIndex(body);
+        const subject = body.slice(0, auxIdx !== -1 ? auxIdx : enoughIdx - 1);
+        const be = auxIdx !== -1 ? body[auxIdx] : 'is';
+        const adjective = body.slice((auxIdx !== -1 ? auxIdx : subject.length) + 1, enoughIdx);
+        const isPast = /^(was|were)$/i.test(be);
+        const out = subject.concat([be, 'so']).concat(adjective).concat(['that']).concat(subject.map(lowercaseUnlessI)).concat([isPast ? 'could' : 'can']).concat(body.slice(enoughIdx + 2));
+        return { tokens: fixCapitalization(out).concat(['.']), rule: 'structure-degree', detected: 'simple', steps: [`The sentence is **simple**: "… enough to …" packs a result into a single clause.`, `Turn it into a **complex** sentence: "ADJ enough to VERB" → "so ADJ that [subject] ${isPast ? 'could' : 'can'} VERB".`] };
+      }
+      return { unrecognized: true, reason: `This looks like a "too/enough/so…that" sentence, which converts between simple and complex only.` };
+    }
+
+    // ----- cause / concession / time -----
+    const R = parseStructure(body);
+    if (!R) {
+      return { unrecognized: true, reason: `Supported patterns: "Being ill, he could not come." / "As he was ill, he could not come." / "He was ill, so he could not come."; "In spite of being poor, he is honest." / "Although he is poor, he is honest." / "He is poor, but he is honest."; "On seeing the tiger, he ran away." / "When he saw the tiger, he ran away."; and "too/enough … to" ↔ "so … that …".` };
+    }
+    if (R.form === to) return { unrecognized: true, reason: `This sentence is already ${label[to]}.`, detected: R.form };
+    if (to === 'simple') {
+      const mainSubj = mainSubjectOf(R.main);
+      if (R.subj && !sameWords(R.subj, mainSubj) && !(SUBJECT_CLASS[R.subj[0].toLowerCase()] && sameWords([R.subj[0]], [mainSubj[0]]))) {
+        return { unrecognized: true, reason: `The two clauses have different subjects ("${R.subj.join(' ')}" and "${mainSubj.join(' ')}"), so they can't be merged into one simple sentence with a single subject.`, detected: R.form };
+      }
+    }
+    const relName = { cause: 'reason (cause)', concession: 'contrast (concession)', time: 'time' }[R.relation];
+    const connectorDesc = {
+      cause: { simple: '"Being …"', complex: '"As / Because / Since …"', compound: '", so …"' },
+      concession: { simple: '"In spite of being …"', complex: '"Although / Though …"', compound: '", but …"' },
+      time: { simple: '"On + verb-ing …"', complex: '"When …"', compound: '"… and …"' }
+    }[R.relation];
+    steps.push(`The sentence is **${R.form}** and expresses **${relName}** — it uses ${connectorDesc[R.form]}.`);
+    if (to === 'simple') steps.push(`To make it **simple**, collapse the first clause into a phrase (${connectorDesc.simple}) so that only one subject-verb pair remains.`);
+    else if (to === 'complex') steps.push(`To make it **complex**, turn the idea into a subordinate clause with its own subject and verb, joined by ${connectorDesc.complex}.`);
+    else steps.push(`To make it **compound**, write both ideas as independent clauses joined by ${connectorDesc.compound}.`);
+    const out = renderStructure(R, to);
+    steps.push(`Result: **${label[to]}** sentence — "${detokenize(fixCapitalization(out)).replace(/^./, c => c)}."`);
+    return { tokens: fixCapitalization(out).concat(['.']), rule: 'structure-' + R.relation, detected: R.form, steps };
+  }
+
+  /* ================= 9. Indirect -> Direct Speech ================= */
+  const WH_WORDS_ALL = ['what', 'who', 'whom', 'whose', 'which', 'when', 'where', 'why', 'how'];
+  const REVERSE_TIME_PLACE = [
+    [/\bthe next day\b|\bthe following day\b/gi, 'tomorrow'], [/\bthe day before\b|\bthe previous day\b/gi, 'yesterday'],
+    [/\bthat day\b/gi, 'today'], [/\bthat night\b/gi, 'tonight'], [/\bthe following week\b/gi, 'next week'],
+    [/\bthe previous week\b/gi, 'last week'], [/\bthat week\b/gi, 'this week'], [/\bthat year\b/gi, 'this year'],
+    [/\bthen\b/gi, 'now'], [/\bthere\b/gi, 'here']
+  ];
+  function applyReverseTimePlace(tokens) {
+    let text = tokens.join(' ');
+    REVERSE_TIME_PLACE.forEach(([re, rep]) => { text = text.replace(re, rep); });
+    return text.split(' ').filter(Boolean);
+  }
+
+  /* Build reverse pronoun maps (indirect -> direct). The speaker's pronouns become "I/me/my…";
+     the listener's become "you/your…". When both could be the same word ("he" for a male speaker AND a male
+     listener) the caller decides who wins; "her" is resolved by context (object vs. possessive). */
+  function buildReversePronounMaps(speaker, objKey, preferListener) {
+    const L = {}, S = {};
+    let herObjL = null, herPossL = null, herObjS = null, herPossS = null;
+    if (objKey) {
+      const subj = OBJ_TO_SUBJ[objKey].toLowerCase();
+      const poss = { me: 'my', him: 'his', her: 'her', us: 'our', them: 'their' }[objKey];
+      const possPron = { me: 'mine', him: 'his', her: 'hers', us: 'ours', them: 'theirs' }[objKey];
+      const refl = { me: 'myself', him: 'himself', her: 'herself', us: 'ourselves', them: 'themselves' }[objKey];
+      L[subj] = 'you';
+      if (objKey !== 'her') L[objKey] = 'you';
+      if (poss !== 'her') L[poss] = 'your';
+      if (possPron !== poss) L[possPron] = 'yours';
+      L[refl] = (objKey === 'us' || objKey === 'them') ? 'yourselves' : 'yourself';
+      if (objKey === 'her') { herObjL = 'you'; herPossL = 'your'; }
+    } else if (speaker !== '1st') {
+      // A third-person speaker with no named listener: first-person pronouns refer to the reporter,
+      // who must have been the person addressed — so they were "you" in the original words.
+      L['i'] = 'you'; L['me'] = 'you'; L['my'] = 'your'; L['mine'] = 'yours'; L['myself'] = 'yourself';
+    }
+    if (speaker !== '1st') {
+      const m = PRONOUN_MAP_BY_SPEAKER[speaker];
+      const subjForm = m['i'].toLowerCase(), objForm = m['me'].toLowerCase(), possForm = m['my'].toLowerCase();
+      const possPronForm = m['mine'].toLowerCase(), reflForm = m['myself'].toLowerCase();
+      S[subjForm] = 'I';
+      if (objForm !== 'her') S[objForm] = 'me';
+      if (possForm !== 'her') S[possForm] = 'my';
+      if (possPronForm !== possForm) S[possPronForm] = 'mine';
+      S[reflForm] = 'myself';
+      if (objForm === 'her') { herObjS = 'me'; herPossS = 'my'; }
+    }
+    const conflicts = Object.keys(L).filter(k => S[k] !== undefined && S[k] !== L[k]);
+    const rev = preferListener ? Object.assign({}, S, L) : Object.assign({}, L, S);
+    let herObj = herObjL || herObjS, herPoss = herPossL || herPossS;
+    if (herObjL && herObjS) { herObj = preferListener ? herObjL : herObjS; herPoss = preferListener ? herPossL : herPossS; conflicts.push('her'); }
+    return { rev, herObj, herPoss, conflicts };
+  }
+
+  const NOT_A_NOUN_START = /^(to|in|on|at|for|with|by|from|about|and|but|or|that|if|because|than|too|also|again|now|then|there|here|a|an|the|some|this|these|those|any|each|every)$/;
+  function mapReversePronouns(arr, maps) {
+    return arr.map((w, i) => {
+      const wl = w.toLowerCase();
+      if (wl === 'her' && (maps.herObj || maps.herPoss)) {
+        const next = (arr[i + 1] || '').toLowerCase();
+        const isPoss = next && !NOT_A_NOUN_START.test(next) && SUBJECT_CLASS[next] === undefined && !/^[.,!?;:]$/.test(next);
+        return isPoss ? maps.herPoss : maps.herObj;
+      }
+      const r = maps.rev[wl];
+      return r !== undefined ? r : w;
+    });
+  }
+
+  function reverseBackshift(clause) {
+    const lower = clause.map(t => t.toLowerCase());
+    const out = clause.slice();
+    const hadToIdx = lower.findIndex((t, i) => t === 'had' && lower[i + 1] === 'to');
+    if (hadToIdx !== -1) { out.splice(hadToIdx, 2, 'must'); return out; }
+    const modalMap = { would: 'will', could: 'can', might: 'may' };
+    const mi = lower.findIndex(t => modalMap[t]);
+    if (mi !== -1) { out[mi] = modalMap[lower[mi]]; return out; }
+    const auxIdx = findAuxiliaryIndex(clause);
+    if (auxIdx !== -1) {
+      const w = lower[auxIdx];
+      if (w === 'had') {
+        if (lower[auxIdx + 1] === 'been') { out.splice(auxIdx, 2, 'was'); return out; }
+        const info = recognizeVerb(clause[auxIdx + 1] || '');
+        if (info) { out.splice(auxIdx, 2, conjugate(info.base, 'past')); return out; }
+        return out;
+      }
+      if (w === 'was') { out[auxIdx] = 'is'; return out; }
+      if (w === 'were') { out[auxIdx] = 'are'; return out; }
+      if (w === 'did') { out[auxIdx] = 'do'; return out; }
+      return out;
+    }
+    const mv = findMainVerbIndex(clause, 1);
+    if (mv && (mv.info.tense === 'past' || mv.info.tense === 'pp')) out[mv.index] = mv.info.base;
+    return out;
+  }
+
+  function declarativeToQuestion(tokens) {
+    const auxIdx = findAuxiliaryIndex(tokens);
+    if (auxIdx > 0) return [tokens[auxIdx]].concat(tokens.slice(0, auxIdx)).concat(tokens.slice(auxIdx + 1));
+    const mv = findMainVerbIndex(tokens, 1);
+    if (!mv) return null;
+    const subject = tokens.slice(0, mv.index);
+    const isPast = mv.info.tense === 'past' || mv.info.tense === 'pp';
+    const subjLast = (subject[subject.length - 1] || '').toLowerCase();
+    const plural = ['i', 'you', 'we', 'they'].indexOf(subjLast) !== -1 || isPluralSubject(subject);
+    const doWord = isPast ? 'did' : (plural ? 'do' : 'does');
+    return [doWord].concat(subject).concat([mv.info.base]).concat(tokens.slice(mv.index + 1));
+  }
+
+  function indirectToDirect(rawTokens) {
+    const { body } = stripPunctuation(rawTokens);
+    const lower = body.map(t => t.toLowerCase());
+    const steps = [];
+    let vIdx = -1;
+    for (let i = 0; i < body.length; i++) if (/^(say|says|said|tell|tells|told|ask|asks|asked|order|orders|ordered|request|requests|requested|advise|advises|advised)$/.test(lower[i])) { vIdx = i; break; }
+    if (vIdx < 1) return { unrecognized: true, reason: `No reporting verb (said/told/asked/ordered/requested …) was found after the subject.` };
+    const subject = body.slice(0, vIdx), verb = lower[vIdx];
+    const isPast = /^(said|told|asked|ordered|requested|advised)$/.test(verb);
+    const isSay = /^(say|says|said)$/.test(verb);
+
+    let c = -1, kind = null;
+    for (let i = vIdx + 1; i < body.length; i++) {
+      const t = lower[i];
+      if (t === 'that') { c = i; kind = 'statement'; break; }
+      if (t === 'if' || t === 'whether') { c = i; kind = 'yesno'; break; }
+      if (WH_WORDS_ALL.indexOf(t) !== -1 && i > vIdx) { c = i; kind = 'wh'; break; }
+      if (t === 'to' && !isSay) { c = i; kind = 'command'; break; }
+      if (t === 'not' && lower[i + 1] === 'to') { c = i; kind = 'negcommand'; break; }
+    }
+    if (c === -1 && isSay) { c = vIdx + 1; kind = 'statement-bare'; }
+    if (c === -1) return { unrecognized: true, reason: `Couldn't find "that", "if/whether", a question word, or "to + verb" after the reporting verb.` };
+
+    const objectToks = body.slice(vIdx + 1, kind === 'statement-bare' ? vIdx + 1 : c);
+    const objKey = listenerKeyOf(objectToks);
+    const speaker = speakerPersonOf(subject);
+    const preferListener = kind === 'yesno' || kind === 'wh';
+    const maps = buildReversePronounMaps(speaker, objKey, preferListener);
+    const notes = [];
+    const mapPron = arr => mapReversePronouns(arr, maps);
+    const list = arr => arr.map(x => `**${x}**`).join(', ');
+    const kindName = { statement: 'statement', 'statement-bare': 'statement', yesno: 'yes/no question', wh: 'wh-question', command: 'command or request', negcommand: 'negative command' }[kind];
+
+    steps.push(`Find the reporting clause: speaker **"${subject.join(' ')}"**, reporting verb **"${verb}"**${objectToks.length ? `, listener **"${objectToks.join(' ')}"**` : ''}. The words after it are a reported **${kindName}**.`);
+
+    const reportingWord = isPast ? 'said' : 'says';
+    const toListener = objectToks.length ? ['to'].concat(objectToks) : [];
+    const tellVerb = /^(tell|tells|told)$/.test(verb);
+    const changes = { pron: [], tense: [], time: [] };
+    const clauseWords = body.slice(Math.min(c + 1, body.length)).map(t => t.toLowerCase());
+    const hit = maps.conflicts.filter(k => clauseWords.indexOf(k) !== -1);
+    if (hit.length) notes.push(`The speaker and the listener could both be "${hit[0]}" here, so it was read as ${preferListener ? 'the listener ("you")' : 'the speaker ("I")'}. If the sentence means the other person, swap it.`);
+    if (speaker !== '1st' && clauseWords.some(t => ['they', 'them', 'their', 'theirs', 'themselves'].indexOf(t) !== -1)) notes.push(`"They" was left as "they". If the speaker meant to include themselves, the original word was "we".`);
+
+    if (kind === 'statement' || kind === 'statement-bare' || kind === 'yesno' || kind === 'wh') {
+      let clause0 = body.slice(kind === 'statement-bare' ? c : c + 1);
+      let whWord = null;
+      if (kind === 'wh') { whWord = body[c].toLowerCase(); clause0 = body.slice(c + 1); }
+      const c1 = mapPron(clause0);
+      changes.pron = diffPairs(clause0, c1);
+      const c2 = isPast ? reverseBackshift(c1) : c1;
+      const c3 = fixAgreement(c2);
+      changes.tense = diffPairs(c1, c3);
+      let clause = c3;
+      if (isPast) { clause = applyReverseTimePlace(c3); changes.time = diffPairs(c3, clause); }
+
+      steps.push(`Put the spoken words in **quotation marks** after a comma${tellVerb && objectToks.length ? `; "${verb}" goes back to **"${reportingWord} to"** before the listener` : ''}.`);
+      if (changes.pron.length) steps.push(`Turn the **pronouns** back into the speaker's own words: ${list(changes.pron)}.`);
+      if (isPast) steps.push(changes.tense.length ? `The reporting verb is past, so move the **tense one step forward** again: ${list(changes.tense)}.` : `The reporting verb is past, so the tense normally moves one step forward — nothing needed changing here.`);
+      if (changes.time.length) steps.push(`Restore the **time and place words**: ${list(changes.time)}.`);
+
+      let quoted;
+      if (kind === 'statement' || kind === 'statement-bare') {
+        quoted = clause.concat(['.']);
+      } else {
+        let q = declarativeToQuestion(clause);
+        if (!q) return { unrecognized: true, reason: `Couldn't rebuild the question — no auxiliary or recognizable verb was found.` };
+        if (kind === 'yesno') steps.push(`Make it a question again: bring the auxiliary (or do/does/did) back in front of the subject and end with a question mark.`);
+        else { q = [whWord].concat(q); steps.push(`Make it a question again: put the question word "${whWord}" first, then the auxiliary (or do/does/did) before the subject, and end with a question mark.`); }
+        quoted = q.concat(['?']);
+      }
+      const verbOut = kind === 'yesno' || kind === 'wh' ? (isPast ? 'asked' : 'asks') : reportingWord;
+      const quotedCap = quoted.slice(); quotedCap[0] = capitalizeFirst(quotedCap[0]);
+      const subjOut = subject.slice(); subjOut[0] = capitalizeFirst(subjOut[0]);
+      const out = subjOut.concat([verbOut]).concat(kind === 'yesno' || kind === 'wh' ? objectToks : toListener).concat([',', '"']).concat(quotedCap).concat(['"']);
+      return { tokens: fixInnerI(out), rule: 'indirect-to-direct-' + kind.replace('-bare', ''), steps, notes, applied: (kind === 'yesno' || kind === 'wh') ? [4, 7] : [7] };
+    }
+
+    const verbPhrase = body.slice(kind === 'negcommand' ? c + 2 : c + 1);
+    if (!verbPhrase.length) return { unrecognized: true, reason: `Nothing follows "to".` };
+    const p1 = mapPron(verbPhrase);
+    changes.pron = diffPairs(verbPhrase, p1);
+    const phrase = applyReverseTimePlace(p1);
+    changes.time = diffPairs(p1, phrase);
+    const isRequest = /^(requested|requests|request|asked|asks)$/.test(verb) && kind !== 'negcommand';
+    steps.push(`Put the command in **quotation marks** as the speaker's own words: "to + verb" becomes ${isRequest ? '**Please** + the base verb' : (kind === 'negcommand' ? '**Do not** + the base verb' : 'the base verb on its own')}; "${verb}" goes back to **"${reportingWord}${objectToks.length ? ' to' : ''}"**.`);
+    if (changes.pron.length) steps.push(`Turn the **pronouns** back into the speaker's own words: ${list(changes.pron)}.`);
+    if (changes.time.length) steps.push(`Restore the **time and place words**: ${list(changes.time)}.`);
+    let quoted;
+    if (kind === 'negcommand') quoted = ['Do', 'not'].concat(phrase);
+    else if (isRequest) quoted = ['Please'].concat(phrase);
+    else { quoted = phrase.slice(); quoted[0] = capitalizeFirst(quoted[0]); }
+    const subjOut = subject.slice(); subjOut[0] = capitalizeFirst(subjOut[0]);
+    const out = subjOut.concat([reportingWord]).concat(objectToks.length ? ['to'].concat(objectToks) : []).concat([',', '"']).concat(quoted).concat(['.', '"']);
+    return { tokens: fixInnerI(out), rule: 'indirect-to-direct-command', steps, notes, applied: [5, 7] };
+  }
+  function fixInnerI(tokens) { return tokens.map(t => (t.toLowerCase() === 'i' ? 'I' : t)); }
+
+  return {
+    AUXILIARIES, MODALS, BE_FORMS, VERB_FORMS, REVERSE_VERB,
+    conjugate, recognizeVerb, tokenize, detokenize, spacingFlags, capitalizeFirst, fixCapitalization,
+    findAuxiliaryIndex, findMainVerbIndex, stripPunctuation, articleFor,
+    affirmativeNegative, activePassive, assertiveInterrogative, directIndirect,
+    assertiveToExclamatory, exclamatoryToAssertive, assertiveToImperative, imperativeToAssertive,
+    assertiveToOptative, optativeToAssertive, structureConvert,
+    expandContractions, SUBJECT_CLASS
+  };
+})();
+
+
+/* ========================================================================== */
+/* 1C. CONVERTER API (routes the dropdown choices to the engine)              */
+/* ========================================================================== */
+
+/**
+ * The API the user interface talks to:
+ *     Converter.convert(sentence, fromKey, toKey)  returns a result object
+ *     Converter.checkPair(fromKey, toKey)          returns { ok, message }
+ *
+ * It (1) cleans the input, (2) works out which conversion the From/To pair means,
+ * (3) runs the engine, and (4) packages the answer with its rule, formula,
+ * step-by-step explanation and a word-level diff so the page can highlight changes.
+ */
+const Converter = (function () {
+  'use strict';
+  const G = GrammarEngine;
+
+  const FAMILY = {
+    affirmative: 'polarity', negative: 'polarity',
+    assertive: 'mood', interrogative: 'mood', imperative: 'mood', exclamatory: 'mood', optative: 'mood',
+    active: 'voice', passive: 'voice', direct: 'narration', indirect: 'narration',
+    simple: 'structure', complex: 'structure', compound: 'structure'
+  };
+  const MOOD_CATEGORY = {
+    interrogative: 'assertive-interrogative', imperative: 'assertive-imperative',
+    exclamatory: 'assertive-exclamatory', optative: 'assertive-optative'
+  };
+
+  /* ---------- Which grammar conversion does a From/To pair mean? ---------- */
+  function resolveRoute(from, to) {
+    if (!FAMILY[from] || !FAMILY[to]) return { error: 'missing' };
+    if (from === to) return { error: 'same' };
+    const ff = FAMILY[from], tf = FAMILY[to];
+
+    if (ff === 'polarity' && tf === 'polarity') return { kind: 'polarity', toNegative: to === 'negative', category: 'affirmative-negative' };
+    if (ff === 'voice' && tf === 'voice') return { kind: 'voice', toPassive: to === 'passive', category: 'active-passive' };
+    if (ff === 'narration' && tf === 'narration') return { kind: 'narration', toIndirect: to === 'indirect', category: 'direct-indirect' };
+    if (ff === 'structure' && tf === 'structure') return { kind: 'structure', category: 'sentence-structure' };
+
+    const moodLike = k => FAMILY[k] === 'mood' || FAMILY[k] === 'polarity';
+    if (moodLike(from) && moodLike(to)) {
+      if (from === 'assertive' && tf === 'polarity') {
+        return { kind: 'polarity', toNegative: to === 'negative', category: 'affirmative-negative', note: `"Assertive" covers both affirmative and negative statements, so this was treated as a conversion to ${TYPE_LABEL[to]}.` };
+      }
+      if (to === 'assertive' && ff === 'polarity') {
+        if (from === 'affirmative') return { error: 'already-assertive' };
+        return { kind: 'polarity', toNegative: false, category: 'affirmative-negative', note: `A negative sentence is an assertive sentence, so this was treated as Negative to Affirmative.` };
+      }
+      const fromAssertive = from === 'assertive' || ff === 'polarity';
+      const toAssertive = to === 'assertive' || tf === 'polarity';
+      if (fromAssertive && !toAssertive) {
+        return { kind: 'mood', engine: to, toAssertive: false, category: MOOD_CATEGORY[to], note: ff === 'polarity' ? `${TYPE_LABEL[from]} sentences are assertive sentences, so this was treated as Assertive to ${TYPE_LABEL[to]}.` : null };
+      }
+      if (!fromAssertive && toAssertive) {
+        return { kind: 'mood', engine: from, toAssertive: true, category: MOOD_CATEGORY[from], note: tf === 'polarity' ? `The result is returned as an assertive sentence — its polarity (affirmative or negative) follows from the original ${TYPE_LABEL[from].toLowerCase()} sentence.` : null };
+      }
+      return { error: 'mood-chain' };
+    }
+    return { error: 'cross' };
+  }
+
+  function validTargets(from) {
+    return Object.keys(FAMILY).filter(t => t !== from && !resolveRoute(from, t).error);
+  }
+
+  function checkPair(from, to) {
+    const r = resolveRoute(from, to);
+    if (!r.error) return { ok: true };
+    return { ok: false, kind: r.error, message: pairMessage(r.error, from, to) };
+  }
+
+  function pairMessage(kind, from, to) {
+    const targets = validTargets(from).map(t => TYPE_LABEL[t]);
+    if (kind === 'same') return `From and To are both "${TYPE_LABEL[from]}" — pick a different "To" type.`;
+    if (kind === 'already-assertive') return `An affirmative sentence is already an assertive sentence. Try Affirmative to Negative, or Assertive to Interrogative, Imperative, Exclamatory or Optative.`;
+    if (kind === 'mood-chain') return `${TYPE_LABEL[from]} to ${TYPE_LABEL[to]} isn't a direct conversion. Convert to Assertive first, then to ${TYPE_LABEL[to]}.`;
+    if (kind === 'cross') return `${TYPE_LABEL[from]} to ${TYPE_LABEL[to]} isn't a standard grammar conversion. From ${TYPE_LABEL[from]} you can convert to: ${targets.join(', ') || 'nothing yet'}.`;
+    return `Please choose both a From and a To type.`;
+  }
+
+  /* ---------- Input cleaning ---------- */
+  const CONTRACTIONS_TO_EXPAND = [
+    [/\b(I)'m\b/gi, '$1 am'],
+    [/\b(you|we|they)'re\b/gi, '$1 are'],
+    [/\b(I|you|we|they)'ve\b/gi, '$1 have'],
+    [/\b(I|you|he|she|it|we|they)'ll\b/gi, '$1 will'],
+    [/\b(it|he|she|that|there|what|who)'s\b/gi, '$1 is']
+  ];
+  function normalizeInput(raw) {
+    let s = String(raw == null ? '' : raw)
+      .replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"')
+      .replace(/\s+/g, ' ').trim();
+    // single-quoted direct speech -> double quotes (only when no double quotes are present)
+    const opening = /(^|[\s,:(])'(?=\S)/;
+    if (s.indexOf('"') === -1 && opening.test(s)) {
+      s = s.replace(opening, '$1"');
+      const closers = Array.from(s.matchAll(/(\S)'(?=[\s.,!?;:)]|$)/g));
+      if (closers.length) { const last = closers[closers.length - 1]; s = s.slice(0, last.index + 1) + '"' + s.slice(last.index + 2); }
+    }
+    CONTRACTIONS_TO_EXPAND.forEach(([re, rep]) => { s = s.replace(re, (m, a) => rep.replace('$1', a)); });
+    return s;
+  }
+
+  /* ---------- Word-level diff (so the UI can highlight changed words) ---------- */
+  function wordDiff(inTokens, outTokens) {
+    const isWord = t => /^[A-Za-z0-9]/.test(t);
+    const aIdx = [], bIdx = [];
+    inTokens.forEach((t, i) => { if (isWord(t)) aIdx.push(i); });
+    outTokens.forEach((t, i) => { if (isWord(t)) bIdx.push(i); });
+    const a = aIdx.map(i => inTokens[i].toLowerCase()), b = bIdx.map(i => outTokens[i].toLowerCase());
+    const n = a.length, m = b.length;
+    const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+    const keptIn = new Array(n).fill(false), keptOut = new Array(m).fill(false);
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) { keptIn[i] = true; keptOut[j] = true; i++; j++; }
+      else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+      else j++;
+    }
+    const removed = new Array(inTokens.length).fill(false), changed = new Array(outTokens.length).fill(false);
+    aIdx.forEach((tokIdx, k) => { if (!keptIn[k]) removed[tokIdx] = true; });
+    bIdx.forEach((tokIdx, k) => { if (!keptOut[k]) changed[tokIdx] = true; });
+    return { removed, changed };
+  }
+
+  /* ---------- Main entry point ---------- */
+  function fail(kind, title, message, extra) {
+    return Object.assign({ ok: false, kind, title, message }, extra || {});
+  }
+
+  function exampleFor(from, to) {
+    return EXAMPLES.find(e => e.from === from && e.to === to) || null;
+  }
+
+  function convert(rawSentence, from, to) {
+    const sentence = normalizeInput(rawSentence);
+    if (!sentence) return fail('empty', 'Nothing to convert yet', 'Type or paste a sentence in the box above, then press Convert.');
+
+    // one sentence at a time (text inside quotation marks and common abbreviations don't count)
+    const unquoted = sentence.replace(/"[^"]*"/g, '""').replace(/\b(Mr|Mrs|Ms|Dr|Prof|St)\./g, '$1');
+    if (/[.!?]\s+[A-Za-z]/.test(unquoted)) {
+      return fail('multiple', 'One sentence at a time', 'It looks like there is more than one sentence in the box. Enter a single sentence, then convert the next one separately.');
+    }
+
+    if ((sentence.match(/"[^"]*"/g) || []).some(q => /[.!?]\s+[A-Za-z]/.test(q))) {
+      return fail('multiple', 'One spoken sentence at a time', 'The quotation marks contain more than one sentence. Convert each spoken sentence separately.');
+    }
+
+    const route = resolveRoute(from, to);
+    if (route.error) {
+      const titles = { same: 'Choose two different types', 'already-assertive': 'Already an assertive sentence', 'mood-chain': 'Convert in two steps', cross: 'Not a standard conversion', missing: 'Choose both types' };
+      const targets = validTargets(from);
+      return fail(route.error, titles[route.error] || 'Cannot convert', pairMessage(route.error, from, to),
+        { suggestions: targets.map(t => ({ from, to: t, label: `${TYPE_LABEL[from]} to ${TYPE_LABEL[t]}` })) });
+    }
+
+    // quotation marks only make sense for direct speech
+    if (route.kind !== 'narration' && sentence.indexOf('"') !== -1) {
+      return fail('mismatch', 'This looks like direct speech', `The sentence contains quotation marks, so it is direct speech. Set "From" to Direct Speech to convert it to indirect speech.`,
+        { suggestions: [{ from: 'direct', to: 'indirect', label: 'Direct Speech to Indirect Speech' }] });
+    }
+    if (route.kind === 'narration' && !route.toIndirect && sentence.indexOf('"') !== -1) {
+      return fail('mismatch', 'This is already direct speech', `The sentence has quotation marks, so it is direct speech. To change it, set "From" to Direct Speech and "To" to Indirect Speech.`,
+        { suggestions: [{ from: 'direct', to: 'indirect', label: 'Direct Speech to Indirect Speech' }] });
+    }
+
+    // quick sanity check: a statement type chosen, but the text is clearly a question
+    if ((from === 'assertive' || FAMILY[from] === 'polarity') && /\?\s*$/.test(sentence) && route.kind !== 'narration') {
+      return fail('mismatch', 'This looks like a question', `The sentence ends with a question mark, but "From" is ${TYPE_LABEL[from]}. Set "From" to Interrogative to convert it.`,
+        { suggestions: [{ from: 'interrogative', to: 'assertive', label: 'Interrogative to Assertive' }] });
+    }
+
+    const tokens = G.tokenize(sentence);
+    const leftover = sentence.replace(/[A-Za-z0-9]+(?:['\-][A-Za-z0-9]+)*|[.,!?;:"]|\s+/g, '');
+    const notes = [];
+    if (route.note) notes.push(route.note);
+    if (leftover) notes.push(`Some symbols aren't understood by the converter and were left out: ${Array.from(new Set(leftover.split(''))).join(' ')}`);
+
+    let r;
+    try {
+      const body = G.stripPunctuation(tokens).body;
+      if (route.kind === 'polarity') r = G.affirmativeNegative(tokens, route.toNegative);
+      else if (route.kind === 'voice') r = G.activePassive(tokens, route.toPassive);
+      else if (route.kind === 'narration') r = G.directIndirect(tokens, route.toIndirect);
+      else if (route.kind === 'structure') r = G.structureConvert(tokens, from, to);
+      else if (route.kind === 'mood') {
+        if (route.engine === 'interrogative') r = G.assertiveInterrogative(tokens, !route.toAssertive);
+        else if (route.engine === 'imperative') r = route.toAssertive ? G.imperativeToAssertive(body) : G.assertiveToImperative(body);
+        else if (route.engine === 'exclamatory') r = route.toAssertive ? G.exclamatoryToAssertive(body) : G.assertiveToExclamatory(body);
+        else r = route.toAssertive ? G.optativeToAssertive(body) : G.assertiveToOptative(body);
+      }
+    } catch (e) {
+      return fail('error', 'Something went wrong', 'The sentence could not be analysed. Try a simpler version of it.');
+    }
+
+    if (r && r.alreadyNegative) {
+      return fail('already', 'That sentence is already negative', 'It already contains "not" after its auxiliary verb. To reverse it, set From = Negative and To = Affirmative.',
+        { suggestions: [{ from: 'negative', to: 'affirmative', label: 'Negative to Affirmative' }] });
+    }
+    if (!r || !r.tokens) {
+      const reason = (r && r.reason) || '';
+      let title = `Couldn't convert this sentence`;
+      let message = reason || `The sentence doesn't match any pattern this converter knows for ${TYPE_LABEL[from]} to ${TYPE_LABEL[to]}.`;
+      if (route.kind === 'polarity' && !route.toNegative) title = `No negative word found`;
+      if (r && r.detected && /already/.test(reason)) title = `Nothing to change`;
+      const ex = exampleFor(from, to);
+      return fail('unrecognized', title, message, {
+        example: ex, rules: ruleBundle(route.category, []), category: route.category,
+        tip: `This tool uses grammar patterns rather than guessing, so it works best on clear, single, textbook-style sentences.`
+      });
+    }
+
+    // a finished sentence always ends with proper punctuation (inputs typed without a full stop get one)
+    const lastTok = r.tokens[r.tokens.length - 1];
+    if (!/^[.!?"]$/.test(lastTok)) r.tokens = r.tokens.concat(['.']);
+
+    const converted = G.detokenize(r.tokens);
+    const diff = wordDiff(tokens, r.tokens);
+    if (route.kind === 'structure' && r.detected && r.detected !== from) {
+      notes.push(`This sentence is actually **${r.detected}**, not ${from} — it was converted from its real structure.`);
+    }
+    (r.notes || []).forEach(n => notes.push(n));
+
+    // formulas
+    let formulas = FORMULAS[r.rule] || [];
+    if (route.kind === 'structure') {
+      const relation = r.rule.replace('structure-', '');
+      const table = STRUCTURE_FORMULAS[relation];
+      const fromForm = r.detected || from;
+      formulas = table && table[fromForm] && table[to] ? [[table[fromForm], table[to]]] : [];
+    }
+
+    const polarity = route.kind === 'polarity';
+    const intro = `When converting ${TYPE_PHRASE[from]} into ${TYPE_PHRASE[to]}${polarity ? ' without changing the meaning' : ''}:`;
+
+    return {
+      ok: true,
+      from, to, fromLabel: TYPE_LABEL[from], toLabel: TYPE_LABEL[to],
+      fromShown: TYPE_LABEL[(route.kind === 'structure' && r.detected) ? r.detected : from],
+      input: sentence, inputTokens: tokens, inputSpacing: G.spacingFlags(tokens), removed: diff.removed,
+      converted, tokens: r.tokens, spacing: G.spacingFlags(r.tokens), changed: diff.changed,
+      ruleId: r.rule, category: route.category,
+      intro, formulas,
+      rules: ruleBundle(route.category, r.applied || RULE_POINTS[r.rule] || []),
+      steps: r.steps || [], notes
+    };
+  }
+
+  function ruleBundle(category, applied) {
+    const cat = GRAMMAR_RULES[category];
+    return {
+      title: cat.title, points: cat.points, applied,
+      signalWords: category === 'affirmative-negative' ? SIGNAL_WORDS : null
+    };
+  }
+
+  return { convert, checkPair, validTargets, normalizeInput };
+})();
+  </script>
+
+  <script>
+/* ==========================================================================
+   PART 2 OF 2: USER INTERFACE (reads the page, calls Converter, draws results)
+   ========================================================================== */
+/**
+ * Connects the page to the Converter: fills the dropdowns, handles the buttons,
+ * draws the Result / Rule / Explanation panels, and toggles the theme.
+ * It relies on these names defined in part 1: SENTENCE_TYPES, TYPE_LABEL,
+ * DEFAULT_COUNTERPART, EXAMPLES and Converter.
+ */
+(function () {
+  'use strict';
+
+  const $ = (sel) => document.querySelector(sel);
+  const els = {
+    form: $('#converter-form'), from: $('#from'), to: $('#to'), swap: $('#swap'),
+    sentence: $('#sentence'), hint: $('#input-hint'), status: $('#pair-status'),
+    output: $('#output'), examples: $('#examples'), exampleList: $('#example-list'),
+    clear: $('#clear'), theme: $('#theme-toggle'), sr: $('#sr-status')
+  };
+
+  /* What a sentence of each type looks like — shown as the placeholder, so people know what to type. */
+  const PLACEHOLDER = {
+    affirmative: 'e.g. He is an honest boy.',
+    negative: 'e.g. She does not play football.',
+    assertive: 'e.g. He is honest.',
+    interrogative: "e.g. Isn't he honest?",
+    imperative: 'e.g. Obey your parents.',
+    exclamatory: 'e.g. What a beautiful flower it is!',
+    optative: 'e.g. May you live long!',
+    active: 'e.g. The cat chased the mouse.',
+    passive: 'e.g. The mouse was chased by the cat.',
+    direct: 'e.g. He said to me, "I am happy."',
+    indirect: 'e.g. He told me that he was happy.',
+    simple: 'e.g. Being ill, he could not attend the class.',
+    complex: 'e.g. As he was ill, he could not attend the class.',
+    compound: 'e.g. He was ill, so he could not attend the class.'
+  };
+  const HINT = {
+    direct: 'Put the spoken words in quotation marks, like: He said to me, "I am happy."',
+    passive: 'To turn a passive sentence back into active, it needs a "by" phrase naming who did the action.',
+    simple: 'Works with reason (being …), contrast (in spite of being …), time (on …ing) and too … to / … enough to.',
+    complex: 'Works with reason (as / because), contrast (although), time (when) and so … that.',
+    compound: 'Works with reason (…, so …), contrast (…, but …) and time (… and …).'
+  };
+
+  /* ---------- helpers ---------- */
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  /* very small inline formatter: **bold** and *italic* (text is escaped first) */
+  function fmt(s) {
+    return esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>');
+  }
+  const icon = (id) => `<svg aria-hidden="true"><use href="#${id}"></use></svg>`;
+  const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* Rebuild a sentence from tokens, wrapping runs of changed words in <mark> (new) or <del> (removed). */
+  function tokensToHtml(tokens, spacing, flags, tag) {
+    let html = '', i = 0, run = 0;
+    while (i < tokens.length) {
+      const lead = spacing[i] ? ' ' : '';
+      if (flags[i]) {
+        let j = i, inner = '';
+        while (j < tokens.length && flags[j]) { inner += (j > i && spacing[j] ? ' ' : '') + esc(tokens[j]); j++; }
+        html += lead + `<${tag} style="--i:${run++}">${inner}</${tag}>`;
+        i = j;
+      } else {
+        html += lead + esc(tokens[i]);
+        i++;
+      }
+    }
+    return html;
+  }
+
+  /* ---------- dropdowns ---------- */
+  function fillSelect(select) {
+    select.innerHTML = SENTENCE_TYPES.map((g) =>
+      `<optgroup label="${esc(g.group)}">${g.options.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</optgroup>`
+    ).join('');
+  }
+
+  function refreshPair() {
+    const chk = Converter.checkPair(els.from.value, els.to.value);
+    els.status.hidden = chk.ok;
+    els.status.textContent = chk.ok ? '' : chk.message;
+    els.sentence.placeholder = PLACEHOLDER[els.from.value] || '';
+    els.hint.textContent = HINT[els.from.value] || '';
+  }
+
+  function setPair(from, to) {
+    els.from.value = from;
+    els.to.value = to;
+    refreshPair();
+  }
+
+  /* ---------- rendering ---------- */
+  function renderResult(res) {
+    const original = tokensToHtml(res.inputTokens, res.inputSpacing, res.removed, 'del');
+    const converted = tokensToHtml(res.tokens, res.spacing, res.changed, 'mark');
+
+    const formulas = res.formulas.map(([a, b]) => `
+      <dl class="formula">
+        <dt>${esc(res.fromShown)}</dt><dd>${esc(a)}</dd>
+        <dt>${esc(res.toLabel)}</dt><dd class="is-to">${esc(b)}</dd>
+      </dl>`).join('');
+
+    const applied = res.rules.applied;
+    const usedItems = applied.map((i) => `<li class="applied">${fmt(res.rules.points[i])}</li>`).join('');
+    const allItems = res.rules.points.map((p, i) => {
+      const used = applied.indexOf(i) !== -1;
+      return `<li${used ? ' class="applied"' : ''}>${used ? '<span class="tag">Used here</span>' : ''}${fmt(p)}</li>`;
+    }).join('');
+
+    const signal = res.rules.signalWords ? `
+      <div class="table-scroll">
+        <table class="signal-table">
+          <caption>Signal words to look for</caption>
+          <thead><tr><th scope="col">If the sentence has</th><th scope="col">It becomes</th><th scope="col">Example</th></tr></thead>
+          <tbody>${res.rules.signalWords.map(([a, b, c]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td><td>${esc(c)}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>` : '';
+
+    const usedBlock = applied.length ? `
+      <h3 class="rule-heading">${applied.length > 1 ? 'Rules used here' : 'Rule used here'}</h3>
+      <ul class="rule-list">${usedItems}</ul>` : '';
+
+    const notes = res.notes.map((n) => `<div class="note">${icon('i-info')}<p>${fmt(n)}</p></div>`).join('');
+    const steps = res.steps.map((s) => `<li><span>${fmt(s)}</span></li>`).join('');
+
+    els.output.innerHTML = `
+      <div class="result-block">
+        <section class="answer" aria-labelledby="result-title">
+          <h2 class="panel-title" id="result-title">Result</h2>
+          <p class="label">Original (${esc(res.fromShown)})</p>
+          <p class="original">${original}</p>
+          <p class="label">Converted (${esc(res.toLabel)})</p>
+          <p class="converted" id="converted-text">${converted}</p>
+          <div class="answer-actions">
+            <button type="button" class="btn-chip" id="copy-btn">${icon('i-copy')}<span>Copy sentence</span></button>
+            <button type="button" class="btn-chip" id="reverse-btn">${icon('i-undo')}<span>Convert it back</span></button>
+          </div>
+        </section>
+
+        <div class="explain-grid">
+          <section class="panel" aria-labelledby="rule-title">
+            <h2 class="panel-title" id="rule-title">Rule</h2>
+            <p class="intro-line">${esc(res.intro)}</p>
+            ${formulas}
+            ${usedBlock}
+            <details class="more-rules">
+              <summary>${icon('i-chevron-right')}<span>All rules for ${esc(res.rules.title)}</span></summary>
+              <ul class="rule-list">${allItems}</ul>
+              ${signal}
+            </details>
+          </section>
+
+          <section class="panel" aria-labelledby="explain-title">
+            <h2 class="panel-title" id="explain-title">Explanation</h2>
+            ${notes}
+            <ol class="steps">${steps}</ol>
+          </section>
+        </div>
+      </div>`;
+
+    $('#copy-btn').addEventListener('click', () => copyResult(res.converted));
+    $('#reverse-btn').addEventListener('click', () => {
+      els.sentence.value = res.converted;
+      setPair(res.to, res.from);
+      run();
+    });
+
+    els.sr.textContent = `Converted sentence: ${res.converted}`;
+    els.examples.open = false;
+  }
+
+  function renderError(res) {
+    const suggestions = (res.suggestions || []).slice(0, 6).map((s) =>
+      `<button type="button" class="btn-quiet" data-use-from="${esc(s.from)}" data-use-to="${esc(s.to)}">Use ${esc(s.label)}</button>`).join('');
+    const example = res.example
+      ? `<button type="button" class="btn-quiet" data-example="${EXAMPLES.indexOf(res.example)}">Try an example: ${esc(res.example.sentence)}</button>` : '';
+    const rules = res.rules ? `
+      <section class="panel" style="margin-top:1.25rem" aria-labelledby="how-title">
+        <h2 class="panel-title" id="how-title">How this conversion works</h2>
+        <ul class="rule-list">${res.rules.points.map((p) => `<li>${fmt(p)}</li>`).join('')}</ul>
+      </section>` : '';
+
+    els.output.innerHTML = `
+      <section class="alert${res.kind === 'empty' ? ' is-soft' : ''}">
+        <h2>${esc(res.title)}</h2>
+        <p>${esc(res.message)}</p>
+        ${res.tip ? `<p class="tip">${esc(res.tip)}</p>` : ''}
+        ${(suggestions || example) ? `<div class="alert-actions">${suggestions}${example}</div>` : ''}
+      </section>${rules}`;
+
+    els.sr.textContent = `${res.title}. ${res.message}`;
+  }
+
+  function run() {
+    const res = Converter.convert(els.sentence.value, els.from.value, els.to.value);
+    if (res.ok) renderResult(res); else renderError(res);
+    if (typeof els.output.scrollIntoView === 'function') els.output.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' });
+  }
+
+  /* ---------- copy ---------- */
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall through */ }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+  async function copyResult(text) {
+    const btn = $('#copy-btn');
+    const ok = await copyText(text);
+    const label = btn.querySelector('span');
+    label.textContent = ok ? 'Copied' : 'Press Ctrl + C to copy';
+    btn.querySelector('svg use').setAttribute('href', ok ? '#i-check' : '#i-copy');
+    els.sr.textContent = ok ? 'Copied to clipboard.' : 'Copy was blocked by the browser.';
+    setTimeout(() => {
+      if (!document.body.contains(btn)) return;
+      label.textContent = 'Copy sentence';
+      btn.querySelector('svg use').setAttribute('href', '#i-copy');
+    }, 1800);
+  }
+
+  /* ---------- theme ---------- */
+  function currentTheme() {
+    const attr = document.documentElement.getAttribute('data-theme');
+    if (attr === 'dark' || attr === 'light') return attr;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function syncThemeButton() { els.theme.setAttribute('aria-pressed', String(currentTheme() === 'dark')); }
+  els.theme.addEventListener('click', () => {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('sc-theme', next); } catch (e) { /* storage unavailable */ }
+    syncThemeButton();
+  });
+
+  /* ---------- examples ---------- */
+  els.exampleList.innerHTML = EXAMPLES.map((ex, i) => `
+    <li><button type="button" class="example" data-example="${i}">
+      <span class="ex-sentence">${esc(ex.sentence)}</span>
+      <span class="ex-kind">${esc(TYPE_LABEL[ex.from])} to ${esc(TYPE_LABEL[ex.to])}</span>
+    </button></li>`).join('');
+
+  function loadExample(i) {
+    const ex = EXAMPLES[i];
+    if (!ex) return;
+    setPair(ex.from, ex.to);
+    els.sentence.value = ex.sentence;
+    run();
+  }
+
+  /* ---------- events ---------- */
+  els.from.addEventListener('change', () => {
+    if (!Converter.checkPair(els.from.value, els.to.value).ok) els.to.value = DEFAULT_COUNTERPART[els.from.value];
+    refreshPair();
+  });
+  els.to.addEventListener('change', refreshPair);
+  els.swap.addEventListener('click', () => setPair(els.to.value, els.from.value));
+
+  els.form.addEventListener('submit', (e) => { e.preventDefault(); run(); });
+  els.sentence.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
+  });
+  els.clear.addEventListener('click', () => {
+    els.sentence.value = '';
+    els.output.innerHTML = '';
+    els.sr.textContent = 'Cleared.';
+    els.examples.open = true;
+    els.sentence.focus();
+  });
+
+  document.addEventListener('click', (e) => {
+    const exBtn = e.target.closest('[data-example]');
+    if (exBtn) { loadExample(Number(exBtn.getAttribute('data-example'))); return; }
+    const useBtn = e.target.closest('[data-use-from]');
+    if (useBtn) { setPair(useBtn.getAttribute('data-use-from'), useBtn.getAttribute('data-use-to')); run(); }
+  });
+
+  /* ---------- start ---------- */
+  fillSelect(els.from);
+  fillSelect(els.to);
+  setPair('affirmative', 'negative');
+  syncThemeButton();
+})();
+  </script>
+</body>
+</html>
